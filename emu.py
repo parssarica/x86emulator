@@ -3,6 +3,7 @@
 import operator
 import tomllib
 import random
+import time
 import ast
 import sys
 import os
@@ -374,6 +375,9 @@ with open("config.toml", "rt") as f:
         
     if "debugmode" in data["config"]:
         debug_mode = data["config"]["debugmode"]
+
+    if "tscticks" in data["config"]:
+        tscticks = data["config"]["tscticks"]
         
     if "breakpoints" in data:
         breakpoints = data["breakpoints"]["breakpoints"]
@@ -384,6 +388,13 @@ with open("config.toml", "rt") as f:
         memory_size = int(memory_size.replace("MB", "")) * 1048576
     elif "GB" in memory_size:
         memory_size = int(memory_size.replace("GB", "")) * 1073741824
+
+    if "KHz" in tscticks:
+        tscticks = int(tscticks.replace("KHz", "")) * 1024
+    elif "MHz" in tscticks:
+        tscticks = int(tscticks.replace("MHz", "")) * 1048576
+    elif "GHz" in tscticks:
+        tscticks = int(tscticks.replace("GHz", "")) * 1073741824
                     
             
 memory = [0] * memory_size
@@ -409,6 +420,7 @@ for i in instructions:
             memory[heap_pointer] = byte
             heap_pointer += 1
 
+beginning = int(time.time())
 indirectjumperror = 0
 arg1 = ""
 arg2 = ""
@@ -659,6 +671,9 @@ while True:
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
+            if get_register_value("rbp") == get_register_value("rsp") and get_register_value("rbp") == memory_size:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't pop something from an empty stack.")
+
             popped_val = ""
             for i in range(8):
                 popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
@@ -831,12 +846,33 @@ while True:
         case "cli":
             set_rflags("IF", 0)
         case "pushfq":
-            set_register_value("rsp", get_register_value("rsp") + 1)
-            memory[-get_register_value("rsp")] = get_register_value("rflags")
+            if get_register_value("rsp") - 8 < heap_pointer:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Stack overflow. Optimize assembly code or increase memory size.")
+            
+            data_to_push = get_register_value("rflags")
+                    
+            while data_to_push > 18446744073709551615:
+                data_to_push -= 18446744073709551615
+
+            data_to_push_arr = divide_str(hex(data_to_push).replace("0x", "").zfill(16))
+            data_to_push_arr.reverse()
+            set_register_value("rsp", get_register_value("rsp") - 8)
+            
+            for i in range(8):
+                if data_to_push_arr[i][0] == "0":
+                    memory[get_register_value("rsp") + i] = int(data_to_push_arr[i][1], 16)
+                else:
+                    memory[get_register_value("rsp") + i] = int(data_to_push_arr[i], 16)
         case "popfq":
-            set_register_value("rflags", memory[-get_register_value("rsp")])
-            memory[-get_register_value("rsp")] = 0
-            set_register_value("rsp", get_register_value("rsp") - 1)
+            if get_register_value("rbp") == get_register_value("rsp") and get_register_value("rbp") == memory_size:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't pop something from an empty stack.")
+
+            popped_val = ""
+            for i in range(8):
+                popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
+
+            set_register_value("rflags", int(popped_val, 16))
+            set_register_value("rsp", get_register_value("rsp") + 8)
         case "repe":
             set_rflags("ZF", 1)
             set_register_value("rsi", get_register_value("rsi") - 1)
@@ -921,6 +957,9 @@ while True:
                 set_register_value(arg1, ((get_register_value(arg1) >> int(arg2)) | (get_register_value(arg1) << (8 - int(arg2)))) & int("0x" + ((bits // 4) * "f"), 16))
 
             set_rflags("CF", bin(get_register_value(arg1))[-1])
+        case "rdtsc":
+            set_register_value("eax", ((int(time.time()) - beginning) * tscticks) & 0xFFFFFFFF)
+            set_register_value("edx", (((int(time.time()) - beginning) * tscticks) >> 32) & 0xFFFFFFFF)
         case "":
             pass
         case _:
