@@ -26,6 +26,11 @@ reg_list_64bit = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", 
 reg_list_tmp = []
 for i in reg_list:
     reg_list_tmp.append("[" + i + "]")
+    reg_list_tmp.append("byte [" + i + "]")
+    reg_list_tmp.append("word [" + i + "]")
+    reg_list_tmp.append("dword [" + i + "]")
+    reg_list_tmp.append("qword [" + i + "]")
+
 reg_list = reg_list + reg_list_tmp
 labels = {}
 strings = {}
@@ -37,6 +42,33 @@ base_address = 0x555555554000
 debug_mode = False
 heap_pointer = 0
 last_command_exec = ""
+
+def divide_str(div_str):
+    j = 0
+    buf = ""
+    arr = []
+    for i in div_str:
+        if j == 0:
+            buf += i
+            j = 1
+        else:
+            buf += i
+            j = 0
+            arr.append(buf)
+            buf = ""
+
+    if buf != "":
+        arr.append(buf)
+        
+    return arr
+
+def to_little_endian(num, bits):
+    x = divide_str(hex(num).replace("0x", ""))
+    x.reverse()
+    for i in range(bits // 8 - len(x)):
+        x.append("0")
+
+    return x
 
 def size_check(reg, val):
     if reg.bits == 64:
@@ -77,12 +109,45 @@ def set_register_value(reg, val):
         
     j = 0
     for i in registers:
-        if i.name == reg.replace("[", "").replace("]", ""):
+        if i.name == reg.replace("[", "").replace("]", "").replace("byte", "").replace("qword", "").replace("dword", "").replace("word", "").replace(" ", ""):
             found = True
             if registers[j].name.endswith("h"):
                 memory[registers[j].value * 0x100] = val
             else:
-                memory[registers[j].value] = val
+                if len(arg1.split()) != 1:
+                    if arg1.split()[0] == "byte":
+                        if val > 255:
+                            raise Exception(f"Error: Can't fit value higher than 255 to \"byte\".")
+                        
+                        memory[registers[j].value] = val
+                    elif arg1.split()[0] == "word":
+                        if val > 65535:
+                            raise Exception(f"Error: Can't fit value higher than 65535 to \"word\".")                      
+
+                        memory[registers[j].value] = int(to_little_endian(val, 16)[0], 16)
+                        memory[registers[j].value + 1] = int(to_little_endian(val, 16)[1], 16)
+                    elif arg1.split()[0] == "dword":
+                        if val > 4294967295:
+                            raise Exception(f"Error: Can't fit value higher than 4294967295 to \"dword\".")
+                        memory[registers[j].value] = int(to_little_endian(val, 32)[0], 16)
+                        memory[registers[j].value + 1] = int(to_little_endian(val, 32)[1], 16)
+                        memory[registers[j].value + 2] = int(to_little_endian(val, 32)[2], 16)
+                        memory[registers[j].value + 3] = int(to_little_endian(val, 32)[3], 16)
+                    elif arg1.split()[0] == "qword":
+                        if val > 18446744073709551615:
+                            raise Exception(f"Error: Can't fit value higher than 18446744073709551615 to \"qword\".")
+                        memory[registers[j].value] = int(to_little_endian(val, 64)[0], 16)
+                        memory[registers[j].value + 1] = int(to_little_endian(val, 64)[1], 16)
+                        memory[registers[j].value + 2] = int(to_little_endian(val, 64)[2], 16)
+                        memory[registers[j].value + 3] = int(to_little_endian(val, 64)[3], 16)
+                        memory[registers[j].value + 4] = int(to_little_endian(val, 64)[4], 16)
+                        memory[registers[j].value + 5] = int(to_little_endian(val, 64)[5], 16)
+                        memory[registers[j].value + 6] = int(to_little_endian(val, 64)[6], 16)
+                        memory[registers[j].value + 7] = int(to_little_endian(val, 64)[7], 16)
+                    else:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown memory size specifier \"{arg1.split()[0]}\".")
+                else:
+                    memory[registers[j].value] = val
             return
 
         j += 1
@@ -102,7 +167,7 @@ def get_register_value(reg):
                     return i.parent.value
 
     for i in registers:
-        if i.name == reg.replace("[", "").replace("]", ""):
+        if i.name == reg.replace("[", "").replace("]", "").replace("byte", "").replace("qword", "").replace("dword", "").replace("word", "").replace(" ", ""):
             if i.name.endswith("h"):
                 return memory[i.parent.value * 0x100]
             else:
@@ -124,17 +189,17 @@ def debug(instruction):
     ins_org = ins
     print_msg(" [ INSTRUCTIONS ] ")
     print(hex(get_register_value("rip") + base_address) + ":\t", end="")
-    print("\033[96m" + ins.split(" ")[0] + "\033[00m " + ", ".join(ins.split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
+    print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
     try:
         ins = instructions[get_register_value("rip") + 1].replace(",", "")
         print(hex(get_register_value("rip") + base_address + 1) + ":\t", end="")
-        print("\033[96m" + ins.split(" ")[0] + "\033[00m " + ", ".join(ins.split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     try:
         ins = instructions[get_register_value("rip") + 2].replace(",", "")
         print(hex(get_register_value("rip") + base_address + 2) + ":\t", end="")
-        print("\033[96m" + ins.split(" ")[0] + "\033[00m " + ", ".join(ins.split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     
@@ -340,24 +405,25 @@ def get_rflags():
 
     return result
 
-def divide_str(div_str):
+def magicsplit(s, delim, words):
+    parts = s.split(delim)
+    result = []
+    skip = False
     j = 0
-    buf = ""
-    arr = []
-    for i in div_str:
-        if j == 0:
-            buf += i
-            j = 1
-        else:
-            buf += i
-            j = 0
-            arr.append(buf)
-            buf = ""
+    for i in parts:
+        if skip:
+            j += 1
+            skip = False
+            continue
 
-    if buf != "":
-        arr.append(buf)
+        if i in words:
+            result.append(i + delim + parts[j + 1])
+            skip = True
+        else:
+            result.append(i)
+        j += 1
         
-    return arr
+    return result
 
 with open("config.toml", "rt") as f:
     data = tomllib.loads(f.read())
@@ -440,26 +506,37 @@ while True:
             instruction = instructions[get_register_value("rip")].replace(",", "")
     except:
         raise Exception("Error: No halt function or exit syscall")
+
+    to_join = []
+    for i in instruction.split():
+        if i.lower() in ["byte", "word", "dword", "qword"]:
+            to_join.append(i.lower())
+        else:
+            to_join.append(i)
+
+    instruction = " ".join(to_join)
     if debug_mode or get_register_value("rip") in breakpoints:
         instruction = debug(instruction)
-    ins = instruction.split(" ")[0]
+
+    splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword"])
+    ins = splitted[0]
     try:
-        arg1 = instruction.split(" ")[1]
+        arg1 = splitted[1]
     except:
         pass
     
     try:
-        arg2 = instruction.split(" ")[2]
+        arg2 = splitted[2]
     except:
         pass
     
     try:
-        arg3 = instruction.split(" ")[3]
+        arg3 = splitted[3]
     except:
         pass
     
     try:
-        arg4 = instruction.split(" ")[4]
+        arg4 = splitted[4]
     except:
         pass
 
@@ -676,9 +753,9 @@ while True:
 
             popped_val = ""
             for i in range(8):
-                popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
+                popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
 
-            set_register_value(arg1, int(popped_val, 16))
+            set_register_value(arg1, int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "xor":
             if arg1 not in reg_list:
@@ -772,9 +849,9 @@ while True:
             set_register_value("rsp", get_register_value("rbp"))
             popped_val = ""
             for i in range(8):
-                popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
+                popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
 
-            set_register_value("rbp", int(popped_val, 16))
+            set_register_value("rbp", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "ret":
             if arg1 not in reg_list:
@@ -782,9 +859,9 @@ while True:
 
             popped_val = ""
             for i in range(8):
-                popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
+                popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
 
-            set_register_value("rip", int(popped_val, 16))
+            set_register_value("rip", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "lea":
             if arg1 not in reg_list:
@@ -869,9 +946,9 @@ while True:
 
             popped_val = ""
             for i in range(8):
-                popped_val = hex(memory[get_register_value("rsp") + i]).replace("0x", "") + popped_val
+                popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
 
-            set_register_value("rflags", int(popped_val, 16))
+            set_register_value("rflags", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "repe":
             set_rflags("ZF", 1)
