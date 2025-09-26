@@ -21,17 +21,39 @@ registers += [Register("eax", 0, 32, parent=registers[0]), Register("ebx", 0, 32
 registers += [Register("ax", 0, 16, parent=registers[0]), Register("bx", 0, 16, parent=registers[1]), Register("cx", 0, 16, parent=registers[2]), Register("dx", 0, 16, parent=registers[3]), Register("si", 0, 16, parent=registers[4]), Register("di", 0, 16, parent=registers[5]), Register("bp", 0, 16, parent=registers[6]), Register("sp", 0, 16, parent=registers[7]), Register("r8w", 0, 16, parent=registers[8]), Register("r9w", 0, 16, parent=registers[9]), Register("r10w", 0, 16, parent=registers[10]), Register("r11w", 0, 16, parent=registers[11]), Register("r12w", 0, 16, parent=registers[12]), Register("r13w", 0, 16, parent=registers[13]), Register("r14w", 0, 16, parent=registers[14]), Register("r15w", 0, 16, parent=registers[15])]
 registers += [Register("al", 0, 8, parent=registers[0]), Register("bl", 0, 8, parent=registers[1]), Register("cl", 0, 8, parent=registers[2]), Register("dl", 0, 8, parent=registers[3]), Register("sil", 0, 8, parent=registers[4]), Register("dil", 0, 8, parent=registers[5]), Register("bpl", 0, 8, parent=registers[6]), Register("spl", 0, 8, parent=registers[7]), Register("r8b", 0, 8, parent=registers[8]), Register("r9b", 0, 8, parent=registers[9]), Register("r10b", 0, 8, parent=registers[10]), Register("r11b", 0, 8, parent=registers[11]), Register("r12b", 0, 8, parent=registers[12]), Register("r13b", 0, 8, parent=registers[13]), Register("r14b", 0, 8, parent=registers[14]), Register("r15b", 0, 8, parent=registers[15])]
 registers += [Register("ah", 0, 8, parent=registers[0]), Register("bh", 0, 8, parent=registers[1]), Register("ch", 0, 8, parent=registers[2]), Register("dh", 0, 8, parent=registers[3])]
+registers += [Register("xmm0", 0, 128), Register("xmm1", 0, 128), Register("xmm2", 0, 128), Register("xmm3", 0, 128), Register("xmm4", 0, 128), Register("xmm5", 0, 128), Register("xmm6", 0, 128), Register("xmm7", 0, 128), Register("xmm8", 0, 128), Register("xmm9", 0, 128), Register("xmm10", 0, 128), Register("xmm11", 0, 128), Register("xmm12", 0, 128), Register("xmm13", 0, 128), Register("xmm14", 0, 128), Register("xmm15", 0, 128)]
+registers += [Register("ymm0", 0, 256), Register("ymm1", 0, 256), Register("ymm2", 0, 256), Register("ymm3", 0, 256), Register("ymm4", 0, 256), Register("ymm5", 0, 256), Register("ymm6", 0, 256), Register("ymm7", 0, 256), Register("ymm8", 0, 256), Register("ymm9", 0, 256), Register("ymm10", 0,256), Register("ymm11", 0,256), Register("ymm12", 0,256), Register("ymm13", 0,256),  Register("ymm14", 0,256), Register("ymm15", 0,256)]
+registers += [Register("zmm0", 0, 512), Register("zmm1", 0, 512), Register("zmm2", 0, 512), Register("zmm3", 0, 512), Register("zmm4", 0, 512), Register("zmm5", 0, 512), Register("zmm6", 0, 512), Register("zmm7", 0, 512), Register("zmm8", 0, 512), Register("zmm9", 0, 512), Register("zmm10", 0, 512), Register("zmm11", 0, 512), Register("zmm12", 0, 512), Register("zmm13", 0, 512), Register("zmm14", 0, 512), Register("zmm15", 0, 512)]
 reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rflags", "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d", "ax", "bx", "cx", "dx", "si", "di", "bp", "sp", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w", "al", "bl", "cl", "dl", "sil", "dil", "bpl", "spl", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b", "ah", "bh", "ch", "dh"]
+reg_list_simd = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15", "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7", "ymm8", "ymm9", "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15", "zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm7", "zmm8", "zmm9", "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15"]
 reg_list_64bit = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rflags"]
 reg_list_tmp = []
+
+for i in range(16):
+    registers[70 + i].parent = registers[86 + i]
+
+for i in range(16):
+    registers[86 + i].parent = registers[102 + i]
+    
 for i in reg_list:
     reg_list_tmp.append("[" + i + "]")
     reg_list_tmp.append("byte [" + i + "]")
     reg_list_tmp.append("word [" + i + "]")
     reg_list_tmp.append("dword [" + i + "]")
     reg_list_tmp.append("qword [" + i + "]")
+    
+reg_list_simd_tmp = []
+for i in reg_list_simd:
+    reg_list_simd_tmp.append("[" + i + "]")
+    if "xmm" in i:
+        reg_list_simd_tmp.append("xmmword [" + i + "]")
+    elif "ymm" in i:
+        reg_list_simd_tmp.append("ymmword [" + i + "]")
+    elif "zmm" in i:
+        reg_list_simd_tmp.append("zmmword [" + i + "]")
 
-reg_list = reg_list + reg_list_tmp
+reg_list += reg_list_tmp
+reg_list_simd += reg_list_simd_tmp
 labels = {}
 strings = {}
 breakpoints = []
@@ -42,6 +64,8 @@ base_address = 0x555555554000
 debug_mode = False
 heap_pointer = 0
 last_command_exec = ""
+showsimd = False
+clearscreen = True
 
 def divide_str(div_str):
     j = 0
@@ -144,6 +168,21 @@ def set_register_value(reg, val):
                         memory[registers[j].value + 5] = int(to_little_endian(val, 64)[5], 16)
                         memory[registers[j].value + 6] = int(to_little_endian(val, 64)[6], 16)
                         memory[registers[j].value + 7] = int(to_little_endian(val, 64)[7], 16)
+                    elif arg1.split()[0] == "xmmword":
+                        if val > 340282366920938463463374607431768211455:
+                            raise Exception(f"Error: Can't fit value higher than 340282366920938463463374607431768211455 to \"xmmword\".")
+                        for k in range(16):
+                            memory[registers[j].value + k] = int(to_little_endian(val, 128)[k], 16)
+                    elif arg1.split()[0] == "ymmword":
+                        if val > 115792089237316195423570985008687907853269984665640564039457584007913129639935:
+                            raise Exception(f"Error: Can't fit value higher than 115792089237316195423570985008687907853269984665640564039457584007913129639935 to \"ymmword\".")
+                        for k in range(32):
+                            memory[registers[j].value + k] = int(to_little_endian(val, 256)[k], 16)
+                    elif arg1.split()[0] == "zmmword":
+                        if val > 13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084095:
+                            raise Exception(f"Error: Can't fit value higher than 13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084095 to \"zmmword\".")
+                        for k in range(32):
+                            memory[registers[j].value + k] = int(to_little_endian(val, 512)[k], 16)
                     else:
                         raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown memory size specifier \"{arg1.split()[0]}\".")
                 else:
@@ -161,7 +200,7 @@ def get_register_value(reg):
             if i.name.endswith("h"):
                 return i.parent.value * 0x100
             else:
-                if i.bits == 64:
+                if i.bits == 64 or i.bits == 512:
                     return i.value
                 else:
                     return i.parent.value
@@ -171,35 +210,36 @@ def get_register_value(reg):
             if i.name.endswith("h"):
                 return memory[i.parent.value * 0x100]
             else:
-                if i.bits == 64:
+                if i.bits == 64 or i.bits == 512:
                     return memory[i.value]
                 else:
                     return memory[i.parent.value]
 
-    raise Exception("Unknown register:", reg)
+    raise Exception("Unknown register: " + reg)
 
 def debug(instruction):
     def print_msg(msg):
         columns = os.get_terminal_size().columns
         print("\033[92m" + "─" * ((columns - len(msg))//2) + msg + "─" * ((columns - len(msg))//2) + "\033[00m")
 
-    global breakpoints, debug_mode, last_command_exec
-    print("\033c")
+    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen
+    if clearscreen:
+        print("\033c")
     ins = instruction.replace(",", "")
     ins_org = ins
     print_msg(" [ INSTRUCTIONS ] ")
     print(hex(get_register_value("rip") + base_address) + ":\t", end="")
-    print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
+    print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
     try:
         ins = instructions[get_register_value("rip") + 1].replace(",", "")
         print(hex(get_register_value("rip") + base_address + 1) + ":\t", end="")
-        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     try:
         ins = instructions[get_register_value("rip") + 2].replace(",", "")
         print(hex(get_register_value("rip") + base_address + 2) + ":\t", end="")
-        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+        print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     
@@ -216,6 +256,15 @@ def debug(instruction):
                         print("\033[91m", j, end="")
                 print("\033[00m ]")
             else:
+                if get_register_value(i) >= 32 and get_register_value(i) <= 126:
+                    print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
+                else:
+                    print()
+
+    if showsimd:
+        for i in reg_list_simd:
+            if "[" not in i and "]" not in i:
+                print("\033[91m$\033[00m" + i + "\t", get_register_value(i), "\t" + hex(get_register_value(i)), end="")
                 if get_register_value(i) >= 32 and get_register_value(i) <= 126:
                     print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
                 else:
@@ -369,7 +418,11 @@ def debug(instruction):
                     print("\033[96m" + instructions[address + i].replace(",", "").split(" ")[0] + "\033[00m " + ", ".join(instructions[address + i].replace(",", "").split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
                 except:
                     break
-            
+        elif command.startswith("toggle"):
+            if command.split()[1].lower() == "simd":
+                showsimd = not showsimd
+            elif command.split()[1].lower() == "clearscreen":
+                clearscreen = not clearscreen
         elif command == "help":
             print("Commands:")
             print("\tsi\t\tForwards one instruction")
@@ -379,6 +432,7 @@ def debug(instruction):
             print("\tci\t\tChanges instruction")
             print("\tcr\t\tChanges register")
             print("\tdisasm\t\tShows instructions at an address")
+            print("\ttoggle ...\t\tToggles something on the debug view")
             print("\tq\t\tExits emulation")
             print("\thelp\t\tShows this help message")
         else:
@@ -509,7 +563,7 @@ while True:
 
     to_join = []
     for i in instruction.split():
-        if i.lower() in ["byte", "word", "dword", "qword"]:
+        if i.lower() in ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"]:
             to_join.append(i.lower())
         else:
             to_join.append(i)
@@ -518,7 +572,7 @@ while True:
     if debug_mode or get_register_value("rip") in breakpoints:
         instruction = debug(instruction)
 
-    splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword"])
+    splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])
     ins = splitted[0]
     try:
         arg1 = splitted[1]
@@ -731,6 +785,9 @@ while True:
                     data_to_push = int(arg1, 16)
                 else:
                     data_to_push = int(arg1)
+
+                if data_to_push > 4294967295:
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. push imm64 isn't valid.")
                     
             while data_to_push > 18446744073709551615:
                 data_to_push -= 18446744073709551615
@@ -1037,6 +1094,227 @@ while True:
         case "rdtsc":
             set_register_value("eax", ((int(time.time()) - beginning) * tscticks) & 0xFFFFFFFF)
             set_register_value("edx", (((int(time.time()) - beginning) * tscticks) >> 32) & 0xFFFFFFFF)
+        case "movq":
+            if arg1 not in reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movq with non SIMD register.")
+
+            if arg2 not in reg_list_64bit:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movq with non 64-bit register.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "movd":
+            if arg1 not in reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movq with non SIMD register.")
+
+            reg_list_32bit = []
+            for i in registers:
+                if i.bits == 32:
+                    reg_list_32bit.append(i.name)
+            if arg2 not in reg_list_32bit:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movq with non 64-bit register.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "pxor":
+            if arg1 not in reg_list_simd or arg2 not in reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use pxor with non SIMD registers.")
+
+            set_register_value(arg1, get_register_value(arg1) ^ get_register_value(arg2))
+        case "movups":
+            if (arg1 not in reg_list_simd and "[" not in arg1) or (arg1 in reg_list_simd and "xmm" not in arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups with non XMM SIMD registers.")
+
+            data_to_set = 0
+            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
+            if arg2 in reg_list_simd and "[" not in arg1:
+                set_register_value(arg1, get_register_value(arg2))
+            else:
+                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(16):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2.replace("[", "").replace("]", "") in reg_list:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(16):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
+                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
+                    for i in range(16):
+                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
+        case "movaps":
+            if (arg1 not in reg_list_simd and "[" not in arg1) or (arg1 in reg_list_simd and "xmm" not in arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups with non XMM SIMD registers.")
+
+            data_to_set = 0
+            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
+
+            if arg2.replace("[", "").replace("]", "") in reg_list + reg_list_simd:
+                if get_register_value(arg2.replace("[", "").replace("]", "")) % 16 != 0:
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movaps with an address which isn't divisible by 16.")
+            else:
+                if "0x" in arg2:
+                    if int(arg2.replace("[", "").replace("]", ""), 16) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movaps with an address which isn't divisible by 16.")
+                else:
+                    if int(arg2.replace("[", "").replace("]", "")) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movaps with an address which isn't divisible by 16.")
+
+            if arg2 in reg_list_simd and "[" not in arg1:
+                set_register_value(arg1, get_register_value(arg2))
+            else:
+                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(16):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2.replace("[", "").replace("]", "") in reg_list:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(16):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
+                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
+                    for i in range(16):
+                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
+        case "vmovups":
+            if arg1 not in reg_list_simd and "[" not in arg1:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups with non SIMD registers.")
+
+            data_to_set = 0
+            if "xmm" in arg1:
+                byte_count = 16
+            elif "ymm" in arg1:
+                byte_count = 32
+            elif "zmm" in arg1:
+                byte_count = 64
+                
+            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
+            if arg2 in reg_list_simd and "[" not in arg1:
+                set_register_value(arg1, get_register_value(arg2))
+            else:
+                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(byte_count):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2.replace("[", "").replace("]", "") in reg_list:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(byte_count):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
+                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
+                    for i in range(byte_count):
+                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
+        case "vmovaps":
+            if (arg1 not in reg_list_simd and "[" not in arg1) or (arg1 in reg_list_simd and "xmm" not in arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups with non SIMD registers.")
+
+            data_to_set = 0
+            if "xmm" in arg1:
+                byte_count = 16
+            elif "ymm" in arg1:
+                byte_count = 32
+            elif "zmm" in arg1:
+                byte_count = 64
+        
+            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
+
+            if arg2.replace("[", "").replace("]", "") in reg_list + reg_list_simd:
+                if get_register_value(arg2.replace("[", "").replace("]", "")) % 16 != 0:
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
+            else:
+                if "0x" in arg2:
+                    if int(arg2.replace("[", "").replace("]", ""), 16) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
+                else:
+                    if int(arg2.replace("[", "").replace("]", "")) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
+
+            if arg2 in reg_list_simd and "[" not in arg1:
+                set_register_value(arg1, get_register_value(arg2))
+            else:
+                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(byte_count):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2.replace("[", "").replace("]", "") in reg_list:
+                    if "[" in arg1:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+
+                    data_to_set = "0x"
+                    for i in range(byte_count):
+                        if "0x" in arg2:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
+                        else:
+                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
+                    set_register_value(arg1, int(data_to_set, 16))
+                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
+                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
+                    for i in range(byte_count):
+                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
+        case "vpxor":
+            if arg1 not in reg_list_simd or arg2 not in reg_list_simd:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. First and second argument should be a SIMD register for vpxor.")
+
+            if arg1[0] != arg2[0] or ((arg3 in reg_list_simd) and (arg3[0] != arg1[0] or arg3[0] != arg2[0])):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Arguments should be in same size for vpxor.")
+
+            if arg3 in reg_list_simd:
+                set_register_value(arg1, get_register_value(arg2) ^ get_register_value(arg3))
+            else:
+                if "0x" in arg3:
+                    set_register_value(arg1, get_register_value(arg2) ^ int(arg3, 16))
+                else:
+                    set_register_value(arg1, get_register_value(arg2) ^ int(arg3))
         case "":
             pass
         case _:
