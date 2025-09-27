@@ -58,9 +58,10 @@ labels = {}
 strings = {}
 breakpoints = []
 code_file = ""
+binary = ""
 memory_size = 0
 entrypoint = 0x0
-base_address = 0x555555554000
+base_address = 0x400000
 debug_mode = False
 heap_pointer = 0
 last_command_exec = ""
@@ -228,17 +229,17 @@ def debug(instruction):
     ins = instruction.replace(",", "")
     ins_org = ins
     print_msg(" [ INSTRUCTIONS ] ")
-    print(hex(get_register_value("rip") + base_address) + ":\t", end="")
+    print(hex(get_register_value("rip")) + ":\t", end="")
     print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
     try:
         ins = instructions[get_register_value("rip") + 1].replace(",", "")
-        print(hex(get_register_value("rip") + base_address + 1) + ":\t", end="")
+        print(hex(get_register_value("rip") + 1) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     try:
         ins = instructions[get_register_value("rip") + 2].replace(",", "")
-        print(hex(get_register_value("rip") + base_address + 2) + ":\t", end="")
+        print(hex(get_register_value("rip") + 2) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
@@ -484,6 +485,9 @@ with open("config.toml", "rt") as f:
     if "code" in data["config"]:
         code_file = data["config"]["code"]
         
+    if "binary" in data["config"]:
+        binary = data["config"]["binary"]
+        
     if "entrypoint" in data["config"]:
         entrypoint = data["config"]["entrypoint"]
         
@@ -520,16 +524,47 @@ with open("config.toml", "rt") as f:
 memory = [0] * memory_size
 instructions = []
 
-with open(code_file, "rt") as f:
-    for line in f.readlines():
-        instructions.append(line.strip())
+if binary == "":
+    with open(code_file, "rt") as f:
+        for line in f.readlines():
+            instructions.append(line.strip())
+else:
+    import lief
+    import capstone
+    with open(binary, "rb") as f:
+        binary_bytes = f.read()
+        
+    binary = lief.parse(binary)
+    machinecode = bytes(binary.get_section(".text").content)
+    if binary.header.identity_class == binary.header.identity_class.ELF64:
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+    elif binary.header.identity_class == binary.header.identity_class.ELF32:
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    else:
+        raise Exception("Unknown binary class: " + binary.header.identity_class)
 
+    last_address = -1
+    for i in md.disasm(machinecode, base_address):
+        if last_address != -1:
+            for j in range(i.address - last_address - 1):
+                instructions.append("morethanonebyte")
+            last_address = i.address
+        instructions.append((i.mnemonic + " " + i.op_str).replace("ptr ", "").strip())
+            
+        if last_address == -1:
+            last_address = i.address
+
+    j = 0
+    for i in binary_bytes:
+        memory[base_address + j] = i
+        j += 1
+        
 return_code = 1
-set_register_value("rip", entrypoint - 1)
+set_register_value("rip", entrypoint + base_address - 1)
 j = 0
 for i in instructions:
     if bool(re.fullmatch(r"[A-Za-z0-9_]+:", i)):
-            labels[i.replace(":", "")] = j
+            labels[i.replace(":", "")] = j + base_address
     j += 1
 
 for i in instructions:
@@ -550,14 +585,17 @@ set_register_value("rsp", memory_size)
 set_register_value("rbp", memory_size)
 while True:
     try:
-        if instructions[get_register_value("rip")].replace(":", "") in labels:
+        if instructions[get_register_value("rip") - base_address].replace(":", "") in labels:
             set_register_value("rip", get_register_value("rip") + 1)
             continue
-        elif instructions[get_register_value("rip")].replace(",", "").split(" ")[0] == ".store":
+        elif instructions[get_register_value("rip") - base_address].replace(",", "").split(" ")[0] == ".store":
+            set_register_value("rip", get_register_value("rip") + 1)
+            continue
+        elif instructions[get_register_value("rip") - base_address].replace(",", "").split(" ")[0] == "morethanonebyte":
             set_register_value("rip", get_register_value("rip") + 1)
             continue
         else:
-            instruction = instructions[get_register_value("rip")].replace(",", "")
+            instruction = instructions[get_register_value("rip") - base_address].replace(",", "")
     except:
         raise Exception("Error: No halt function or exit syscall")
 
@@ -569,7 +607,7 @@ while True:
             to_join.append(i)
 
     instruction = " ".join(to_join)
-    if debug_mode or get_register_value("rip") in breakpoints:
+    if debug_mode or get_register_value("rip") - base_address in breakpoints:
         instruction = debug(instruction)
 
     splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])
@@ -887,6 +925,42 @@ while True:
             elif syscall_id == 318:
                 for i in range(get_register_value("rsi")):
                     memory[get_register_value("rdi") + i] = random.randint(0, 255)
+        case "int":
+            if arg1 != "128" and arg1 != "0x80":
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Invalid use of int instruction.")
+            
+            syscall_id = get_register_value("rax")
+            if syscall_id == 3:
+                str_to_write = next(iter(sys.stdin))
+                i = get_register_value("ecx")
+                j = 0
+                try:
+                    while j < get_register_value("edx"):
+                        memory[i] = ord(str_to_write[j])
+                        j += 1
+                        i += 1
+                except IndexError:
+                    pass
+            elif syscall_id == 4:
+                j = 0
+                for i in memory[get_register_value("ecx"):]:
+                    if j < get_register_value("edx"):
+                        sys.stdout.write(chr(memory[get_register_value("ecx") + j]))
+                        sys.stdout.flush()
+                    else:
+                        break
+                    j += 1
+            elif syscall_id == 90:
+                set_register_value("rax", heap_pointer)
+                heap_pointer += get_register_value("ecx")
+            elif syscall_id == 91:
+                heap_pointer -= get_register_value("ecx")
+            elif syscall_id == 1:
+                return_code = get_register_value("ebx")
+                break
+            elif syscall_id == 355:
+                for i in range(get_register_value("ecx")):
+                    memory[get_register_value("ebx") + i] = random.randint(0, 255)
         case "call":
             if get_register_value("rsp") - 8 < heap_pointer:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Stack overflow. Optimize assembly code or increase memory size.")
@@ -901,7 +975,15 @@ while True:
                 else:
                     memory[get_register_value("rsp") + i] = int(data_to_push_arr[i], 16)
 
-            set_register_value("rip", labels[arg1])
+            if arg1 in reg_list:
+                set_register_value("rip", get_register_value(arg1))
+            elif arg1 not in labels:
+                if "0x" in arg1:
+                    set_register_value("rip", int(arg1, 16))
+                else:
+                    set_register_value("rip", int(arg1))
+            else:
+                set_register_value("rip", labels[arg1])
         case "leave":
             set_register_value("rsp", get_register_value("rbp"))
             popped_val = ""
@@ -1315,6 +1397,17 @@ while True:
                     set_register_value(arg1, get_register_value(arg2) ^ int(arg3, 16))
                 else:
                     set_register_value(arg1, get_register_value(arg2) ^ int(arg3))
+        case "movabs":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. First argument must be a register for movabs.")
+
+            if arg2 in reg_list or arg2.replace("[", "").replace("]", "") in reg_list or "[" in arg2:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Second argument must be a constant for movabs.")
+
+            if "0x" in arg2:
+                set_register_value(arg1, int(arg2, 16))
+            else:
+                set_register_value(arg1, int(arg2))
         case "":
             pass
         case _:
