@@ -3,6 +3,7 @@
 import operator
 import tomllib
 import random
+import numpy
 import time
 import ast
 import sys
@@ -60,7 +61,7 @@ breakpoints = []
 code_file = ""
 binary = ""
 memory_size = 0
-entrypoint = 0x0
+entrypoint = 0x1
 base_address = 0x400000
 debug_mode = False
 heap_pointer = 0
@@ -95,35 +96,87 @@ def to_little_endian(num, bits):
 
     return x
 
-def size_check(reg, val):
-    if reg.bits == 64:
-        if val > 18446744073709551615:
-            raise Exception(f"Error: Can't move value higher than 18446744073709551615 to 64-bit register \"{reg.name}\".")
-    elif reg.bits == 32:
-        if val > 4294967295:
-            raise Exception(f"Error: Can't move value higher than 4294967295 to 32-bit register \"{reg.name}\".")
-    elif reg.bits == 16:
-        if val > 65535:
-            raise Exception(f"Error: Can't move value higher than 65535 to 16-bit register \"{reg.name}\".")
-    elif reg.bits == 8:
-        if val > 255:
-            raise Exception(f"Error: Can't move value higher than 255 to 8-bit register \"{reg.name}\".")
+def isrelative(address):
+    if "byte" in address or "word" in address or "dword" in address or "qword" in address:
+        if address.split()[1][0] != "[" or address[-1] != "]":
+            return False
     else:
-        raise Exception(f"Unknown register bits: {reg.bits}. Register name: {reg.name}")
+        if address[0] != "[" or address[-1] != "]":
+            return False
+
+    found = False
+    for i in registers:
+        if i.name in address:
+            found = True
+            break
+
+    if not found:
+        return False
+
+    if "+" not in address and "-" not in address and "*" not in address and "/" not in address:
+        return False
+
+    return True
+
+def calc_relative(addr):
+    eval_string = addr
+    for i in registers:
+        if not any(arg1 in group for group in re.findall(r'\((.*?)\)', eval_string)):
+            eval_string = eval_string.replace(i.name, "get_register_xxxxxx(\"" + i.name + "\")")
+
+    for string in strings:
+        eval_string = eval_string.replace(string, str(strings[string]))
+
+    eval_string = eval_string.replace("byte ", "")
+    eval_string = eval_string.replace("dword ", "")
+    eval_string = eval_string.replace("qword ", "")
+    eval_string = eval_string.replace("word ", "")
+    eval_string = eval_string.replace("rel ", "")
+    eval_string = eval_string.replace("[", "")
+    eval_string = eval_string.replace("]", "")
+    
+    return eval(eval_string.replace("xxxxxx", "value"))
+    
+def size_check(bits, val):
+    if val > 2 ** bits - 1:
+        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move value higher than {str(2 ** bits - 1)} to a {str(bits)}-bit register.")
 
     return val
 
+def get_register_bits(reg):
+    for i in registers:
+        if i.name == reg:
+            return i.bits
+
 def set_register_value(reg, val):
     global registers, memory
+    if isrelative(reg):
+        addr = calc_relative(reg)
+        if "byte" in reg:
+            memory[addr] = val
+        elif "qword" in reg:
+            bytes_to_set = to_little_endian(val, 64)
+            for i in range(8):
+                memory[addr + i] = bytes_to_set[i]
+        elif "dword" in reg:
+            bytes_to_set = to_little_endian(val, 32)
+            for i in range(4):
+                memory[addr + i] = bytes_to_set[i]
+        elif "word" in reg:
+            bytes_to_set = to_little_endian(val, 16)
+            for i in range(2):
+                memory[addr + i] = bytes_to_set[i]
+        return
+    
     found = False
     j = 0
     for i in registers:
         if i.name == reg:
             found = True
             if i.parent == None:
-                registers[j].value = val
+                registers[j].value = size_check(registers[j].bits, val)
             else:
-                registers[j].parent.value = val
+                registers[j].parent.value = size_check(registers[j].bits, val)
 
             if i.parent != None and i.bits == 8 and i.name.endswith("h"):
                 registers[j].parent.value -= val
@@ -191,11 +244,31 @@ def set_register_value(reg, val):
             return
 
         j += 1
-
-    if not found:
-        raise Exception("Unknown register:", reg)
     
 def get_register_value(reg):
+    if isrelative(reg):
+        bytes_to_ret = []
+        calced_addr = calc_relative(reg)
+        try:
+            if "byte" in reg:
+                return memory[calced_addr]
+            elif "qword" in reg:
+                for i in range(8):
+                    bytes_to_ret.append(memory[calced_addr + i])
+            elif "dword" in reg:
+                for i in range(4):
+                    bytes_to_ret.append(memory[calced_addr + i])
+            elif "word" in reg:
+                for i in range(2):
+                    bytes_to_ret.append(memory[calced_addr + i])
+
+            for i in range(len(bytes_to_ret)):
+                bytes_to_ret[i] = hex(bytes_to_ret[i]).replace("0x", "")
+
+            return int("".join(bytes_to_ret), 16)
+        except:
+            raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
+
     for i in registers:
         if i.name == reg:
             if i.name.endswith("h"):
@@ -221,7 +294,10 @@ def get_register_value(reg):
 def debug(instruction):
     def print_msg(msg):
         columns = os.get_terminal_size().columns
-        print("\033[92m" + "─" * ((columns - len(msg))//2) + msg + "─" * ((columns - len(msg))//2) + "\033[00m")
+        print("\033[92m" + "─" * ((columns - len(msg))//2) + msg + "─" * ((columns - len(msg))//2) + "\033[00m", end="")
+        if (columns - len(msg)) % 2 != 0:
+            print("─", end="")
+        print()
 
     global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen
     if clearscreen:
@@ -232,14 +308,22 @@ def debug(instruction):
     print(hex(get_register_value("rip")) + ":\t", end="")
     print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
     try:
-        ins = instructions[get_register_value("rip") + 1].replace(",", "")
-        print(hex(get_register_value("rip") + 1) + ":\t", end="")
+        i = 0
+        while instructions[get_register_value("rip") - base_address + 1 + i] == "morethanonebyte":
+            i += 1
+
+        ins = instructions[get_register_value("rip") - base_address + 1 + i].replace(",", "")
+        print(hex(get_register_value("rip") + 1 + i) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     try:
-        ins = instructions[get_register_value("rip") + 2].replace(",", "")
-        print(hex(get_register_value("rip") + 2) + ":\t", end="")
+        i += 1
+        while instructions[get_register_value("rip") - base_address + 2 + i] == "morethanonebyte":
+            i += 1
+            
+        ins = instructions[get_register_value("rip") - base_address + 2 + i].replace(",", "")
+        print(hex(get_register_value("rip") + 2 + i) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
@@ -401,7 +485,7 @@ def debug(instruction):
                 continue
 
             if command.split(" ")[0] == "disasm":
-                amount = 5
+                amount = 20
             else:
                 amount = int(command.split(" ")[0][6:])
 
@@ -413,12 +497,20 @@ def debug(instruction):
                 print("\033[91mERROR: \033[00mAddress doesn't exist. Perhaps you forgot adding base address?")
                 continue
 
-            for i in range(amount):
+            i = 0
+            j = 0
+            while j < amount:
                 try:
+                    if instructions[i] != "morethanonebyte":
+                        j += 1
+                    else:
+                        i += 1
+                        continue
                     print(hex(address + i + base_address) + ":\t", end="")
                     print("\033[96m" + instructions[address + i].replace(",", "").split(" ")[0] + "\033[00m " + ", ".join(instructions[address + i].replace(",", "").split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
                 except:
                     break
+                i += 1
         elif command.startswith("toggle"):
             if command.split()[1].lower() == "simd":
                 showsimd = not showsimd
@@ -463,23 +555,28 @@ def get_rflags():
 def magicsplit(s, delim, words):
     parts = s.split(delim)
     result = []
-    skip = False
-    j = 0
-    for i in parts:
-        if skip:
-            j += 1
-            skip = False
-            continue
-
-        if i in words:
-            result.append(i + delim + parts[j + 1])
-            skip = True
-        else:
-            result.append(i)
-        j += 1
+    i_plus = 0
+    for i in range(len(parts)):
+        if i + i_plus >= len(parts):
+            break
         
+        if parts[i + i_plus] in words:
+            if "[" in parts[i + i_plus + 1] and "]" not in parts[i + i_plus + 1]:
+                result.append(parts[i + i_plus])
+                while "]" not in parts[i + i_plus]:
+                    result[-1] += " " + parts[i + i_plus + 1]
+                    i_plus += 1
+            elif "[" in parts[i + i_plus + 1] and "]" in parts[i + i_plus + 1]:
+                result.append(parts[i + i_plus] + delim + parts[i + i_plus + 1])
+                i_plus += 1
+            else:
+                raise Exception(f"Error: ")
+        else:
+            result.append(parts[i + i_plus])
+
     return result
 
+base_address_specified = False
 with open("config.toml", "rt") as f:
     data = tomllib.loads(f.read())
     if "code" in data["config"]:
@@ -492,6 +589,7 @@ with open("config.toml", "rt") as f:
         entrypoint = data["config"]["entrypoint"]
         
     if "baseaddress" in data["config"]:
+        base_address_specified = True
         baseaddress = data["config"]["baseaddress"]
         
     if "memory" in data["config"]:
@@ -521,7 +619,7 @@ with open("config.toml", "rt") as f:
         tscticks = int(tscticks.replace("GHz", "")) * 1073741824
                     
             
-memory = [0] * memory_size
+memory = numpy.zeros(memory_size, dtype=numpy.uint8)
 instructions = []
 
 if binary == "":
@@ -535,14 +633,40 @@ else:
         binary_bytes = f.read()
         
     binary = lief.parse(binary)
-    machinecode = bytes(binary.get_section(".text").content)
-    if binary.header.identity_class == binary.header.identity_class.ELF64:
-        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
-    elif binary.header.identity_class == binary.header.identity_class.ELF32:
-        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
-    else:
-        raise Exception("Unknown binary class: " + binary.header.identity_class)
+    bin_format = binary.format.name
 
+    if bin_format == "ELF":
+        if not base_address_specified:
+            base_address = binary.imagebase
+
+        machinecode = bytes(binary.get_section(".text").content)
+        if binary.header.identity_class == binary.header.identity_class.ELF64:
+            md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+        elif binary.header.identity_class == binary.header.identity_class.ELF32:
+            md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+        else:
+            raise Exception("Unknown binary class: " + binary.header.identity_class)
+
+        entrypoint = binary.entrypoint - binary.get_section(".text").virtual_address + 1
+    elif bin_format == "MACHO":
+        machinecode = bytes(binary.get_section("__text").content)
+        # if binary.header.machine == binary.header.machine.AMD64:
+        md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+        # elif binary.header.machine == binary.header.machine.I386:
+            # md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+        # else:
+            # raise Exception("Unknown binary class: " + binary.header.identity_class)
+        entrypoint = binary.entrypoint - binary.get_section("__text").virtual_address + 1
+    elif bin_format == "PE":
+        machinecode = bytes(binary.get_section(".text").content)
+        if binary.header.machine == binary.header.machine.AMD64:
+            md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
+        elif binary.header.machine == binary.header.machine.I386:
+            md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+        else:
+            raise Exception("Unknown binary class: " + binary.header.identity_class)
+        entrypoint = binary.entrypoint - binary.get_section(".text").virtual_address + 1
+    
     last_address = -1
     for i in md.disasm(machinecode, base_address):
         if last_address != -1:
@@ -576,7 +700,6 @@ for i in instructions:
             heap_pointer += 1
 
 beginning = int(time.time())
-indirectjumperror = 0
 arg1 = ""
 arg2 = ""
 arg3 = ""
@@ -646,10 +769,10 @@ while True:
     
     match(ins):
         case "mov":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a register / number to a number")
 
-            if arg2 not in reg_list:
+            if arg2 not in reg_list and not isrelative(arg2):
                 if arg2 in strings:
                     set_register_value(arg1, strings[arg2])
                 elif arg2.replace("[", "").replace("]", "") in strings:
@@ -663,10 +786,12 @@ while True:
         case "nop":
             pass
         case "add":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                  raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
             
-            if arg2 not in reg_list:
+            if isrelative(arg2):
+                set_register_value(arg1, calc_relative(arg2))
+            elif arg2 not in reg_list:
                 if "0x" not in arg2:
                     set_register_value(arg1, get_register_value(arg1) + int(arg2))
                 else:
@@ -674,10 +799,12 @@ while True:
             else:
                 set_register_value(arg1, get_register_value(arg1) + get_register_value(arg2))
         case "sub":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                  raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
             
-            if arg2 not in reg_list:
+            if isrelative(arg2):
+                set_register_value(arg1, calc_relative(arg2))
+            elif arg2 not in reg_list:
                 if "0x" not in arg2:
                     set_register_value(arg1, get_register_value(arg1) - int(arg2))
                 else:
@@ -699,7 +826,14 @@ while True:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. CMP first argument must be a register.")
 
             temp = 0
-            if arg2 in reg_list:
+            if isrelative(arg2):
+                arg2 = calc_relative(arg2)
+                if get_regster_value(arg1) < arg2:
+                    set_rflags("CF", 1)
+                else:
+                    set_rflags("CF", 0)
+                temp = get_register_value(arg1) - arg2
+            elif arg2 in reg_list:
                 if get_register_value(arg1) < get_register_value(arg2):
                     set_rflags("CF", 1)
                 else:
@@ -739,7 +873,6 @@ while True:
             if arg1 not in labels:
                 if arg1 in reg_list:
                     set_register_value("rip", get_register_value(arg1))
-                    indirectjumperror = 2
                 else:
                     if "0x" in arg1:
                         set_register_value("rip", int(arg1, 16) - 1)
@@ -747,12 +880,11 @@ while True:
                         set_register_value("rip", int(arg1) - 1)
             else:
                 set_register_value("rip", labels[arg1])
-        case "je":
+        case "je" | "jz":
             if get_rflags()["ZF"]:
                 if arg1 not in labels:
                     if arg1 in reg_list:
                         set_register_value("rip", get_register_value(arg1))
-                        indirectjumperror = 2
                     else:
                         if "0x" in arg1:
                             set_register_value("rip", int(arg1, 16) - 1)
@@ -760,38 +892,11 @@ while True:
                             set_register_value("rip", int(arg1) - 1)
                 else:
                     set_register_value("rip", labels[arg1])
-        case "jne":
+        case "jne" | "jnz":
             if not get_rflags()["ZF"]:
                 if arg1 not in labels:
                     if arg1 in reg_list:
                         set_register_value("rip", get_register_value(arg1))
-                        indirectjumperror = 2
-                    else:
-                        if "0x" in arg1:
-                            set_register_value("rip", int(arg1, 16) - 1)
-                        else:
-                            set_register_value("rip", int(arg1) - 1)
-                else:
-                    set_register_value("rip", labels[arg1])
-        case "jz":
-            if get_rflags()["ZF"]:
-                if arg1 not in labels:
-                    if arg1 in reg_list:
-                        set_register_value("rip", get_register_value(arg1))
-                        indirectjumperror = 2
-                    else:
-                        if "0x" in arg1:
-                            set_register_value("rip", int(arg1, 16) - 1)
-                        else:
-                            set_register_value("rip", int(arg1) - 1)
-                else:
-                    set_register_value("rip", labels[arg1])
-        case "jnz":
-            if not get_rflags()["ZF"]:
-                if arg1 not in labels:
-                    if arg1 in reg_list:
-                        set_register_value("rip", get_register_value(arg1))
-                        indirectjumperror = 2
                     else:
                         if "0x" in arg1:
                             set_register_value("rip", int(arg1, 16) - 1)
@@ -804,7 +909,6 @@ while True:
                 if arg1 not in labels:
                     if arg1 in reg_list:
                         set_register_value("rip", get_register_value(arg1))
-                        indirectjumperror = 2
                     else:
                         if "0x" in arg1:
                             set_register_value("rip", int(arg1, 16) - 1)
@@ -816,7 +920,9 @@ while True:
             if get_register_value("rsp") - 8 < heap_pointer:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Stack overflow. Optimize assembly code or increase memory size.")
             
-            if arg1 in reg_list:
+            if isrelative(arg1):
+                data_to_push = calc_relative(arg1)
+            elif arg1 in reg_list:
                 data_to_push = get_register_value(arg1)
             else:
                 if "0x" in arg1:
@@ -840,7 +946,7 @@ while True:
                 else:
                     memory[get_register_value("rsp") + i] = int(data_to_push_arr[i], 16)
         case "pop":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
             if get_register_value("rbp") == get_register_value("rsp") and get_register_value("rbp") == memory_size:
@@ -850,13 +956,21 @@ while True:
             for i in range(8):
                 popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
 
-            set_register_value(arg1, int("".join(divide_str(popped_val)), 16))
+            if isrelative(arg1):
+                j = 0
+                for i in popped_val:
+                    memory[calc_relative(arg1) + j] = int(i, 16)
+                    j += 1
+            else:
+                set_register_value(arg1, int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "xor":
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
-            if arg2 not in reg_list:
+            if isrelative(arg2):
+                set_register_value(arg1, arg1 ^ calc_relative(arg2))
+            elif arg2 not in reg_list:
                 if "0x" in arg2:
                     set_register_value(arg1, get_register_value(arg1) ^ int(arg2, 16))
                 else:
@@ -867,7 +981,9 @@ while True:
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
-            if arg2 not in reg_list:
+            if isrelative(arg2):
+                set_register_value(arg1, arg1 & calc_relative(arg2))
+            elif arg2 not in reg_list:
                 if "0x" in arg2:
                     set_register_value(arg1, get_register_value(arg1) & int(arg2, 16))
                 else:
@@ -878,7 +994,9 @@ while True:
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
-            if arg2 not in reg_list:
+            if isrelative(arg2):
+                set_register_value(arg1, arg1 | calc_relative(arg2))
+            elif arg2 not in reg_list:
                 if "0x" in arg2:
                     set_register_value(arg1, get_register_value(arg1) | int(arg2, 16))
                 else:
@@ -975,15 +1093,21 @@ while True:
                 else:
                     memory[get_register_value("rsp") + i] = int(data_to_push_arr[i], 16)
 
-            if arg1 in reg_list:
-                set_register_value("rip", get_register_value(arg1))
+            if isrelative(arg1):
+                popped_val = ""
+                j = 0
+                for i in range(8):
+                    popped_val = hex(memory[calc_relative(arg1) + i]).replace("0x", "")
+                set_register_value("rip", popped_val)
+            elif arg1 in reg_list:
+                set_register_value("rip", get_register_value(arg1) - 1)
             elif arg1 not in labels:
                 if "0x" in arg1:
-                    set_register_value("rip", int(arg1, 16))
+                    set_register_value("rip", int(arg1, 16) - 1)
                 else:
-                    set_register_value("rip", int(arg1))
+                    set_register_value("rip", int(arg1) - 1)
             else:
-                set_register_value("rip", labels[arg1])
+                set_register_value("rip", labels[arg1] - 1)
         case "leave":
             set_register_value("rsp", get_register_value("rbp"))
             popped_val = ""
@@ -1014,29 +1138,31 @@ while True:
                 eval_string = eval_string.replace(string, str(strings[string]))
             
             set_register_value(arg1, int(eval(eval_string.replace("xxxxxx", "value"))))
-        case "endbr64":
-            indirectjumperror = 0
         case "mul":
+            if isrelative(arg1):
+                arg1 = calc_relative(arg1)
             set_register_value("rax", (get_register_value("rax") * get_register_value(arg1)) & 0xFFFFFFFFFFFFFFFF)
             set_register_value("rdx", (get_register_value("rax") * get_register_value(arg1)) >> 64)
         case "div":
             try:
+                if isrelative(arg1):
+                    arg1 = calc_relative(arg1)
                 set_register_value("rdx", get_register_value("rax") % get_register_value(arg1))
                 set_register_value("rax", get_register_value("rax") // get_register_value(arg1))
             except ZeroDivisionError:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't divide by zero.")
         case "test":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a register / number to a number")
 
-            if (get_register_value("rax") & (1 << 64) - 1) == 0:
+            if (get_register_value(arg1) & (1 << 64) - 1) == 0:
                 set_rflags("ZF", 1)
             else:
                 set_rflags("ZF", 0)
 
-            set_rflags("SF", ((get_register_value("rax") & (1 << 64) - 1) >> 63) & 1)
+            set_rflags("SF", ((get_register_value(arg1) & (1 << 64) - 1) >> 63) & 1)
 
-            if bin((get_register_value("rax") & (1 << 64) - 1) & 0xff).count("1") % 2 == 0:
+            if bin((get_register_value(arg1) & (1 << 64) - 1) & 0xff).count("1") % 2 == 0:
                 set_rflags("PF", 1)
             else:
                 set_rflags("PF", 0)
@@ -1109,6 +1235,9 @@ while True:
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
 
+            if isrelative(arg2):
+                arg2 = calc_relative(arg2)
+
             if arg2 in reg_list:
                 set_register_value(arg1, get_register_value(arg1) << get_register_value(arg2))
             else:
@@ -1119,6 +1248,9 @@ while True:
         case "shr":
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
+
+            if isrelative(arg2):
+                arg2 = calc_relative(arg2)
 
             if arg2 in reg_list:
                 set_register_value(arg1, get_register_value(arg1) >> get_register_value(arg2))
@@ -1145,7 +1277,10 @@ while True:
                     set_rflags("OF", 1)
                 set_register_value(arg1, ((get_register_value(arg1) << get_register_value(arg2)) | (get_register_value(arg2) >> (8 - bits))) & int("0x" + (str(bits) * "f")), 16)
             else:
-                if arg2 == "1":
+                if isrelative(arg2):
+                    arg2 = calc_relative(arg1, arg2, 1)
+
+                if arg2 == "1" or arg2 == 1:
                     set_rflags("OF", 1)
                 set_register_value(arg1, ((get_register_value(arg1) << int(arg2)) | (get_register_value(arg1) >> (8 - int(arg2)))) & int("0x" + ((bits // 4) * "f"), 16))
 
@@ -1168,7 +1303,10 @@ while True:
                     set_rflags("OF", 1)
                 set_register_value(arg1, ((get_register_value(arg1) >> get_register_value(arg2)) | (get_register_value(arg2) << (8 - bits))) & int("0x" + (str(bits) * "f")), 16)
             else:
-                if arg2 == "1":
+                if isrelative(arg2):
+                    arg2 = calc_relative(arg1, arg2, 1)
+
+                if arg2 == "1" or arg2 == 1:
                     set_rflags("OF", 1)
                 set_register_value(arg1, ((get_register_value(arg1) >> int(arg2)) | (get_register_value(arg1) << (8 - int(arg2)))) & int("0x" + ((bits // 4) * "f"), 16))
 
@@ -1408,16 +1546,194 @@ while True:
                 set_register_value(arg1, int(arg2, 16))
             else:
                 set_register_value(arg1, int(arg2))
+        case "jo":
+            if get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jno":
+            if not get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "js":
+            if get_rflags()["SF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jns":
+            if not get_rflags()["SF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jc" | "jb" | "jnae":
+            if get_rflags()["CF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jnc" | "jnb" | "jae":
+            if not get_rflags()["CF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jp" | "jpe":
+            if get_rflags()["PF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jnp" | "jpo":
+            if not get_rflags()["PF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "ja" | "jnbe":
+            if not get_rflags()["CF"] and not get_rflags()["ZF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jna" | "jbe":
+            if get_rflags()["CF"] or get_rflags()["ZF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jg" | "jnle":
+            if not get_rflags()["ZF"] and get_rflags()["SF"] == get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jge" | "jnl":
+            if get_rflags()["SF"] == get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jl" | "jnge":
+            if get_rflags()["SF"] != get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jle" | "jng":
+            if get_rflags()["ZF"] or get_rflags()["SF"] != get_rflags()["OF"]:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "jcxz" | "jecxz" | "jrcxz":
+            if get_register_value("rcx") == 0:
+                if arg1 not in labels:
+                    if arg1 in reg_list:
+                        set_register_value("rip", get_register_value(arg1))
+                    else:
+                        if "0x" in arg1:
+                            set_register_value("rip", int(arg1, 16) - 1)
+                        else:
+                            set_register_value("rip", int(arg1) - 1)
+                else:
+                    set_register_value("rip", labels[arg1])
+        case "endbr64":
+            pass
         case "":
             pass
         case _:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown instruction: {ins}")
 
-    if indirectjumperror == 1:
-        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Instruction must be \"endbr64\" after jumping to register value.")
-    else:
-        indirectjumperror -= 1
-        
+      
     set_register_value("rip", get_register_value("rip") + 1)
 
 sys.exit(return_code)
