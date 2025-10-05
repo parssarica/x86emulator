@@ -296,7 +296,7 @@ def debug(instruction):
         columns = os.get_terminal_size().columns
         print("\033[92m" + "─" * ((columns - len(msg))//2) + msg + "─" * ((columns - len(msg))//2) + "\033[00m", end="")
         if (columns - len(msg)) % 2 != 0:
-            print("─", end="")
+            print("\033[92m─\033[00m", end="")
         print()
 
     global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen
@@ -475,6 +475,8 @@ def debug(instruction):
                 i += 1
         elif command == "q":
             sys.exit(0)
+        elif command == "rf":
+            return debug(ins)
         elif command.startswith("disasm"):
             try:
                 if len(command.split(" ")) == 1 or (len(command.split(" ")) != 1 and (command.split(" ")[1].isdigit() or not int(command.split(" ")[1], 16))):
@@ -526,6 +528,7 @@ def debug(instruction):
             print("\tcr\t\tChanges register")
             print("\tdisasm\t\tShows instructions at an address")
             print("\ttoggle ...\t\tToggles something on the debug view")
+            print("\trf\t\tRefreshes the debug view")
             print("\tq\t\tExits emulation")
             print("\thelp\t\tShows this help message")
         else:
@@ -1215,22 +1218,57 @@ while True:
 
             set_register_value("rflags", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
-        case "repe":
+        case "repe" | "repz":
             set_rflags("ZF", 1)
-            set_register_value("rsi", get_register_value("rsi") - 1)
-            set_register_value("rdi", get_register_value("rdi") - 1)
-            while get_register_value("rcx") != 0:
-                if get_rflags()["DF"] == 1:
-                    set_register_value("rsi", get_register_value("rsi") - 1)
-                    set_register_value("rdi", get_register_value("rdi") - 1)
-                else:
-                    set_register_value("rsi", get_register_value("rsi") + 1)
-                    set_register_value("rdi", get_register_value("rdi") + 1)
-
-                if memory[get_register_value("rsi")] != memory[get_register_value("rdi")]:
-                    set_rflags("ZF", 0)
+            if arg1.startswith("cmps"):
+                if arg1[-1] == "b":
+                    i = 1
+                elif arg1[-1] == "w":
+                    i = 2
+                elif arg1[-1] == "d":
+                    i = 4
+                elif arg1[-1] == "q":
+                    i = 8
                     
-                set_register_value("rcx", get_register_value("rcx") - 1)
+                try:
+                    set_register_value("rsi", get_register_value("rsi") - i)
+                    set_register_value("rdi", get_register_value("rdi") - i)
+                    while get_register_value("rcx") != 0:
+                        if get_rflags()["DF"] == 1:
+                            set_register_value("rsi", get_register_value("rsi") - i)
+                            set_register_value("rdi", get_register_value("rdi") - i)
+                        else:
+                            set_register_value("rsi", get_register_value("rsi") + i)
+                            set_register_value("rdi", get_register_value("rdi") + i)
+
+                        if memory[get_register_value("rsi")] != memory[get_register_value("rdi")]:
+                            set_rflags("ZF", 0)
+                            break
+                    
+                        set_register_value("rcx", get_register_value("rcx") - 1)
+                except:                
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
+            elif arg1.startswith("scas"):
+                if arg1[-1] == "b":
+                    i = 1
+                elif arg1[-1] == "w":
+                    i = 2
+                elif arg1[-1] == "d":
+                    i = 4
+                elif arg1[-1] == "q":
+                    i = 8
+
+                try:
+                    while get_rflags("ZF") == 1 and get_register_value("rcx") != 0:
+                        if get_register_value("rax") != memory[get_register_value("rdi")]:
+                            set_rflags("ZF", 0)
+
+                        set_register_value("rdi", get_register_value("rdi") - i)
+                        set_register_value("rcx", get_register_value("rcx") - 1)
+                except:
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
+            else:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown suffix for instruction \"repe\": {arg1}.")
         case "shl":
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
