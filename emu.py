@@ -29,6 +29,7 @@ reg_list = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", 
 reg_list_simd = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15", "ymm0", "ymm1", "ymm2", "ymm3", "ymm4", "ymm5", "ymm6", "ymm7", "ymm8", "ymm9", "ymm10", "ymm11", "ymm12", "ymm13", "ymm14", "ymm15", "zmm0", "zmm1", "zmm2", "zmm3", "zmm4", "zmm5", "zmm6", "zmm7", "zmm8", "zmm9", "zmm10", "zmm11", "zmm12", "zmm13", "zmm14", "zmm15"]
 reg_list_64bit = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rflags"]
 reg_list_tmp = []
+tld_snapshots = []
 
 for i in range(16):
     registers[70 + i].parent = registers[86 + i]
@@ -64,6 +65,8 @@ memory_size = 0
 entrypoint = 0x1
 base_address = 0x400000
 debug_mode = False
+timelessdebugging = False
+continuing_backwards = False
 heap_pointer = 0
 last_command_exec = ""
 showsimd = False
@@ -299,7 +302,8 @@ def debug(instruction):
             print("\033[92m─\033[00m", end="")
         print()
 
-    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen
+    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen, continuing_backwards
+    continuing_backwards = False
     if clearscreen:
         print("\033c")
     ins = instruction.replace(",", "")
@@ -397,9 +401,50 @@ def debug(instruction):
         if command == "si":
             debug_mode = True
             break
+        elif command == "bi":
+            if not timelessdebugging:
+                print("\033[91mERROR: \033[00mTime less debugging is disabled. You can enable it from config.toml file.")
+                continue
+
+            if len(tld_snapshots) == 0:
+                print("\033[91mERROR: \033[00mNot enough snapshots.")
+                continue
+
+            snapshot_id = 0
+            while tld_snapshots[snapshot_id]["addr"] != get_register_value("rip"):
+                snapshot_id += 1
+
+            snapshot_id -= 2
+            
+            debug_mode = True
+            for reg in tld_snapshots[snapshot_id]["registers"]:
+                for k in registers:
+                    if k.name == reg.name:
+                        k.value = reg.value
+            set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+            return tld_snapshots[snapshot_id]["instruction"].replace(",", "")
         elif command == "c":
             debug_mode = False
             break
+        elif command == "bc":
+            if len(tld_snapshots) == 0:
+                print("\033[91mERROR: \033[00mNot enough snapshots.")
+                continue
+
+            snapshot_id = 0
+            while tld_snapshots[snapshot_id]["addr"] != get_register_value("rip"):
+                snapshot_id += 1
+
+            snapshot_id -= 2
+            
+            for reg in tld_snapshots[snapshot_id]["registers"]:
+                for k in registers:
+                    if k.name == reg.name:
+                        k.value = reg.value
+            set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+            debug_mode = False
+            continuing_backwards = True
+            return tld_snapshots[snapshot_id]["instruction"].replace(",", "")
         elif command.startswith("br"):               
             if "0x" in command.split(" ")[1]:
                 if int(command.split(" ")[1], 16) - base_address <= 0:
@@ -521,7 +566,9 @@ def debug(instruction):
         elif command == "help":
             print("Commands:")
             print("\tsi\t\tForwards one instruction")
+            print("\tbi\t\tBackwards one instruction (Works if time less debugging enabled)")
             print("\tc\t\tContinues until a breakpoint")
+            print("\tbc\t\tContinues backwards until a breakpoint")
             print("\tbr\t\tSets a breakpoint")
             print("\tv\t\tShows a memory region")
             print("\tci\t\tChanges instruction")
@@ -579,6 +626,16 @@ def magicsplit(s, delim, words):
 
     return result
 
+def take_snapshot():
+    global tld_snapshots
+    snapshot = {}
+    snapshot["addr"] = get_register_value("rip")
+    snapshot["registers"] = []
+    for reg in registers:
+        snapshot["registers"].append(Register(reg.name, reg.value, reg.bits))
+    snapshot["instruction"] = instructions[get_register_value("rip") - base_address]
+    tld_snapshots.append(snapshot)
+
 base_address_specified = False
 with open("config.toml", "rt") as f:
     data = tomllib.loads(f.read())
@@ -603,6 +660,9 @@ with open("config.toml", "rt") as f:
 
     if "tscticks" in data["config"]:
         tscticks = data["config"]["tscticks"]
+        
+    if "timelessdebugging" in data["config"]:
+        timelessdebugging = data["config"]["timelessdebugging"]
         
     if "breakpoints" in data:
         breakpoints = data["breakpoints"]["breakpoints"]
@@ -733,9 +793,26 @@ while True:
             to_join.append(i)
 
     instruction = " ".join(to_join)
-    if debug_mode or get_register_value("rip") - base_address in breakpoints:
+    if timelessdebugging:
+        take_snapshot()
+        
+    if (debug_mode or get_register_value("rip") - base_address in breakpoints) and not continuing_backwards:
         instruction = debug(instruction)
+    elif continuing_backwards:
+        snapshot_id = 0
+        while tld_snapshots[snapshot_id]["addr"] != get_register_value("rip"):
+            snapshot_id += 1
 
+        snapshot_id -= 2
+        
+        debug_mode = True
+        for reg in tld_snapshots[snapshot_id]["registers"]:
+            for k in registers:
+                if k.name == reg.name:
+                    k.value = reg.value
+        set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+        instruction = tld_snapshots[snapshot_id]["instruction"].replace(",", "")
+        
     splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])
     ins = splitted[0]
     try:
