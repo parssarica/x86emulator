@@ -17,7 +17,7 @@ class Register:
         self.bits = bits
         self.parent = parent
 
-registers = [Register("rax", 0, 64), Register("rbx", 0, 64), Register("rcx", 0, 64), Register("rdx", 0, 64), Register("rsi", 0, 64), Register("rdi", 0, 64), Register("rbp", 0, 64), Register("rsp", 0, 64), Register("r8", 0, 64), Register("r9", 0, 64), Register("r10", 0, 64), Register("r11", 0, 64), Register("r12", 0, 64), Register("r13", 0, 64), Register("r14", 0, 64), Register("r15", 0, 64), Register("rip", 0, 64), Register("rflags", 0, 64)]
+registers = [Register("rax", 0, 64), Register("rbx", 0, 64), Register("rcx", 0, 64), Register("rdx", 0, 64), Register("rsi", 0, 64), Register("rdi", 0, 64), Register("rbp", 0, 64), Register("rsp", 0, 64), Register("r8", 0, 64), Register("r9", 0, 64), Register("r10", 0, 64), Register("r11", 0, 64), Register("r12", 0, 64), Register("r13", 0, 64), Register("r14", 0, 64), Register("r15", 0, 64), Register("rip", 0, 64), Register("rflags", 0x200, 64)]
 registers += [Register("eax", 0, 32, parent=registers[0]), Register("ebx", 0, 32, parent=registers[1]), Register("ecx", 0, 32, parent=registers[2]), Register("edx", 0, 32, parent=registers[3]), Register("esi", 0, 32, parent=registers[4]), Register("edi", 0, 32, parent=registers[5]), Register("ebp", 0, 32, parent=registers[6]), Register("esp", 0, 32, parent=registers[7]), Register("r8d", 0, 32, parent=registers[8]), Register("r9d", 0, 32, parent=registers[9]), Register("r10d", 0, 32, parent=registers[10]), Register("r11d", 0, 32, parent=registers[11]), Register("r12d", 0, 32, parent=registers[12]), Register("r13d", 0, 32, parent=registers[13]), Register("r14d", 0, 32, parent=registers[14]), Register("r15d", 0, 32, parent=registers[15])]
 registers += [Register("ax", 0, 16, parent=registers[0]), Register("bx", 0, 16, parent=registers[1]), Register("cx", 0, 16, parent=registers[2]), Register("dx", 0, 16, parent=registers[3]), Register("si", 0, 16, parent=registers[4]), Register("di", 0, 16, parent=registers[5]), Register("bp", 0, 16, parent=registers[6]), Register("sp", 0, 16, parent=registers[7]), Register("r8w", 0, 16, parent=registers[8]), Register("r9w", 0, 16, parent=registers[9]), Register("r10w", 0, 16, parent=registers[10]), Register("r11w", 0, 16, parent=registers[11]), Register("r12w", 0, 16, parent=registers[12]), Register("r13w", 0, 16, parent=registers[13]), Register("r14w", 0, 16, parent=registers[14]), Register("r15w", 0, 16, parent=registers[15])]
 registers += [Register("al", 0, 8, parent=registers[0]), Register("bl", 0, 8, parent=registers[1]), Register("cl", 0, 8, parent=registers[2]), Register("dl", 0, 8, parent=registers[3]), Register("sil", 0, 8, parent=registers[4]), Register("dil", 0, 8, parent=registers[5]), Register("bpl", 0, 8, parent=registers[6]), Register("spl", 0, 8, parent=registers[7]), Register("r8b", 0, 8, parent=registers[8]), Register("r9b", 0, 8, parent=registers[9]), Register("r10b", 0, 8, parent=registers[10]), Register("r11b", 0, 8, parent=registers[11]), Register("r12b", 0, 8, parent=registers[12]), Register("r13b", 0, 8, parent=registers[13]), Register("r14b", 0, 8, parent=registers[14]), Register("r15b", 0, 8, parent=registers[15])]
@@ -70,6 +70,9 @@ continuing_backwards = False
 heap_pointer = 0
 last_command_exec = ""
 showsimd = False
+showstack = True
+showheap = True
+showregisters = True
 clearscreen = True
 
 def divide_str(div_str):
@@ -107,28 +110,18 @@ def isrelative(address):
         if address[0] != "[" or address[-1] != "]":
             return False
 
-    found = False
-    for i in registers:
-        if i.name in address:
-            found = True
-            break
-
-    if not found:
-        return False
-
-    if "+" not in address and "-" not in address and "*" not in address and "/" not in address:
-        return False
-
     return True
 
 def calc_relative(addr):
     eval_string = addr
+    replace_arr = []
     for i in registers:
-        if not any(arg1 in group for group in re.findall(r'\((.*?)\)', eval_string)):
-            eval_string = eval_string.replace(i.name, "get_register_xxxxxx(\"" + i.name + "\")")
+        replace_arr.append(i.name)
 
     for string in strings:
-        eval_string = eval_string.replace(string, str(strings[string]))
+        replace_arr.append(string)
+
+    eval_string = re.sub(f"({"|".join(replace_arr)})", "get_register_xxxxxx(\"\\1\")", eval_string)
 
     eval_string = eval_string.replace("byte ", "")
     eval_string = eval_string.replace("dword ", "")
@@ -160,15 +153,15 @@ def set_register_value(reg, val):
         elif "qword" in reg:
             bytes_to_set = to_little_endian(val, 64)
             for i in range(8):
-                memory[addr + i] = bytes_to_set[i]
+                memory[addr + i] = int(bytes_to_set[i], 16)
         elif "dword" in reg:
             bytes_to_set = to_little_endian(val, 32)
             for i in range(4):
-                memory[addr + i] = bytes_to_set[i]
+                memory[addr + i] = int(bytes_to_set[i], 16)
         elif "word" in reg:
             bytes_to_set = to_little_endian(val, 16)
             for i in range(2):
-                memory[addr + i] = bytes_to_set[i]
+                memory[addr + i] = int(bytes_to_set[i], 16)
         return
     
     found = False
@@ -287,10 +280,47 @@ def get_register_value(reg):
             if i.name.endswith("h"):
                 return memory[i.parent.value * 0x100]
             else:
-                if i.bits == 64 or i.bits == 512:
-                    return memory[i.value]
-                else:
-                    return memory[i.parent.value]
+                if "byte" in reg:
+                    if i.bits == 64 or i.bits == 512:
+                        return memory[i.value]
+                    else:
+                        return memory[i.parent.value]
+                elif "qword" in reg:
+                    popped_val = ""
+
+                    if i.bits == 64 or i.bits == 512:
+                        addr = i.value
+                    else:
+                        addr = i.parent.value
+                        
+                    for i in range(8):
+                        popped_val = (hex(memory[addr + i]).replace("0x", "")).zfill(2) + popped_val
+
+                    return int(popped_val, 16)
+                elif "dword" in reg:
+                    popped_val = ""
+
+                    if i.bits == 64 or i.bits == 512:
+                        addr = i.value
+                    else:
+                        addr = i.parent.value
+                        
+                    for i in range(4):
+                        popped_val = (hex(memory[addr + i]).replace("0x", "")).zfill(2) + popped_val
+
+                    return int(popped_val, 16)
+                elif "word" in reg:
+                    popped_val = ""
+
+                    if i.bits == 64 or i.bits == 512:
+                        addr = i.value
+                    else:
+                        addr = i.parent.value
+                        
+                    for i in range(2):
+                        popped_val = (hex(memory[addr + i]).replace("0x", "")).zfill(2) + popped_val
+
+                    return int(popped_val, 16)
 
     raise Exception("Unknown register: " + reg)
 
@@ -302,7 +332,7 @@ def debug(instruction):
             print("\033[92m─\033[00m", end="")
         print()
 
-    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen, continuing_backwards
+    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen, continuing_backwards, showregisters, showstack, showheap
     continuing_backwards = False
     if clearscreen:
         print("\033c")
@@ -332,64 +362,58 @@ def debug(instruction):
     except:
         pass
     
-    print_msg(" [ REGISTERS ] ")
-    for i in reg_list_64bit + ["rip"]:
-        if "[" not in i and "]" not in i:
-            print("\033[91m$\033[00m" + i + "\t", get_register_value(i), "\t" + hex(get_register_value(i)), end="")
-            if i == "rflags":
-                print(" [", end="")
-                for j in get_rflags():
-                    if get_rflags()[j] == 1:
-                        print("\033[92m", j, end="")
-                    else:
-                        print("\033[91m", j, end="")
-                print("\033[00m ]")
-            else:
-                if get_register_value(i) >= 32 and get_register_value(i) <= 126:
-                    print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
-                else:
-                    print()
-
-    if showsimd:
-        for i in reg_list_simd:
+    if showregisters:
+        print_msg(" [ REGISTERS ] ")
+        for i in reg_list_64bit + ["rip"]:
             if "[" not in i and "]" not in i:
                 print("\033[91m$\033[00m" + i + "\t", get_register_value(i), "\t" + hex(get_register_value(i)), end="")
-                if get_register_value(i) >= 32 and get_register_value(i) <= 126:
-                    print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
+                if i == "rflags":
+                    print(" [", end="")
+                    for j in get_rflags():
+                        if get_rflags()[j] == 1:
+                            print("\033[92m", j, end="")
+                        else:
+                            print("\033[91m", j, end="")
+                    print("\033[00m ]")
                 else:
-                    print()
+                    if get_register_value(i) >= 32 and get_register_value(i) <= 126:
+                        print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
+                    else:
+                        print()
 
-    print_msg(" [ STACK ] ")
-    i = 0
-    j = 0
-    while i <= memory_size - get_register_value("rsp"):
-        if i >= memory_size - get_register_value("rbp"):
-            print(hex(get_register_value("rsp") - j) + ":", str(memory[get_register_value("rsp") - 1 + i]) + "\t" + hex(memory[get_register_value("rsp") - 1 + i]), end="")
-        else:
+        if showsimd:
+            for i in reg_list_simd:
+                if "[" not in i and "]" not in i:
+                    print("\033[91m$\033[00m" + i + "\t", get_register_value(i), "\t" + hex(get_register_value(i)), end="")
+                    if get_register_value(i) >= 32 and get_register_value(i) <= 126:
+                        print(" \033[93m\"" + chr(get_register_value(i)) + "\"\033[00m")
+                    else:
+                        print()
+
+    if showstack:
+        print_msg(" [ STACK ] ")
+        for i in range((get_register_value("rbp") - get_register_value("rsp")) // 8):
+            print("\033[93m" + hex(get_register_value("rbp") + (i * 8)) + ": \033[00m", end="")
+            data_read = []
+            for j in range(8):
+                data_read.append(hex(memory[get_register_value("rsp") + (i * 8) + j]).replace("0x", ""))
+
+            data_read.reverse()
+            data_read = int("".join(data_read), 16)
+            if data_read > 0x1000:
+                print(hex(data_read).zfill(18))
+            else:
+                print(data_read)
+
+    if showheap:
+        print_msg(" [ HEAP ] ")
+        i = 0
+        while i < heap_pointer:
+            if memory[i] >= 32 and memory[i] <= 126:
+                print("\033[93m\"" + chr(memory[i]) + "\"\033[00m", end=" ")
+            else:
+                print(hex(memory[i]), end=" ")
             i += 1
-            j += 1
-            continue
-        if memory[get_register_value("rsp") - 1 + i] >= 32 and memory[get_register_value("rsp") - 1 + i] <= 126:
-            print(" \033[93m\"" + chr(memory[get_register_value("rsp") - 1 + i]) + "\"\033[00m", end="")
-        if i == memory_size - get_register_value("rbp"):
-            print("\t\033[101mRBP\033[0m", end="")
-        if i == memory_size - get_register_value("rsp"):
-            print("\t\033[101mRSP\033[0m", end="")
-        if i % 8 != 0:
-            print("\t" , end="")
-        else:
-            print()
-        i += 1
-        j += 1
-
-    print_msg(" [ HEAP ] ")
-    i = 0
-    while i < heap_pointer:
-        if memory[i] >= 32 and memory[i] <= 126:
-            print("\033[93m\"" + chr(memory[i]) + "\"\033[00m", end=" ")
-        else:
-            print(hex(memory[i]), end=" ")
-        i += 1
     print()
 
     while True:
@@ -398,6 +422,11 @@ def debug(instruction):
             command = last_command_exec
 
         last_command_exec = command
+
+        command_tmp = str(command)
+        for i in command_tmp.split():
+            if i.startswith("$"):
+                command = command.replace(i, str(get_register_value(i[1:])))
         if command == "si":
             debug_mode = True
             break
@@ -509,7 +538,7 @@ def debug(instruction):
                         if memory[i*12 + j + addr] >= 32 and memory[i*12 + j + addr] <= 126 and memory[i*12 + j + addr] != 46:
                             print(chr(memory[i*12 + j + addr]), end="")
                         elif memory[i*12 + j + addr] == 46:
-                            print("\033[91m.\033[0m", end="")
+                            print("\033[91m.\033[00m\033[02m", end="")
                         else:
                             print(".", end="")
                     else:
@@ -521,10 +550,10 @@ def debug(instruction):
         elif command == "q":
             sys.exit(0)
         elif command == "rf":
-            return debug(ins)
+            return debug(ins_org.replace(",", ""))
         elif command.startswith("disasm"):
             try:
-                if len(command.split(" ")) == 1 or (len(command.split(" ")) != 1 and (command.split(" ")[1].isdigit() or not int(command.split(" ")[1], 16))):
+                if len(command.split(" ")) == 1 or (len(command.split(" ")) != 1 and not (command.split(" ")[1].isdigit() or not int(command.split(" ")[1], 16))):
                     print("\033[91mERROR: \033[00mAddress not specified for command \"disasm\"")
                     continue
             except:
@@ -553,8 +582,8 @@ def debug(instruction):
                     else:
                         i += 1
                         continue
-                    print(hex(address + i + base_address) + ":\t", end="")
-                    print("\033[96m" + instructions[address + i].replace(",", "").split(" ")[0] + "\033[00m " + ", ".join(instructions[address + i].replace(",", "").split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+                    print(hex(address + i + base_address + j) + ":\t", end="")
+                    print("\033[96m" + instructions[address + i + j].replace(",", "").split(" ")[0] + "\033[00m " + ", ".join(instructions[address + i].replace(",", "").split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
                 except:
                     break
                 i += 1
@@ -563,6 +592,14 @@ def debug(instruction):
                 showsimd = not showsimd
             elif command.split()[1].lower() == "clearscreen":
                 clearscreen = not clearscreen
+            elif command.split()[1].lower() == "clearscreen":
+                clearscreen = not clearscreen
+            elif command.split()[1].lower() == "stack":
+                showstack = not showstack
+            elif command.split()[1].lower() == "heap":
+                showheap = not showheap
+            elif command.split()[1].lower() == "registers":
+                showregisters = not showregisters
         elif command == "help":
             print("Commands:")
             print("\tsi\t\tForwards one instruction")
@@ -620,9 +657,15 @@ def magicsplit(s, delim, words):
                 result.append(parts[i + i_plus] + delim + parts[i + i_plus + 1])
                 i_plus += 1
             else:
-                raise Exception(f"Error: ")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Invalid instruction syntax.")
         else:
-            result.append(parts[i + i_plus])
+            if "[" in parts[i + i_plus] and "]" not in parts[i + i_plus]:
+                result.append(parts[i + i_plus])
+                while "]" not in parts[i + i_plus]:
+                    result[-1] += " " + parts[i + i_plus + 1]
+                    i_plus += 1
+            else:
+                result.append(parts[i + i_plus])
 
     return result
 
@@ -637,65 +680,71 @@ def take_snapshot():
     tld_snapshots.append(snapshot)
 
 base_address_specified = False
-with open("config.toml", "rt") as f:
-    data = tomllib.loads(f.read())
-    if "code" in data["config"]:
-        code_file = data["config"]["code"]
+try:
+    with open("config.toml", "rt") as f:
+        data = tomllib.loads(f.read())
+        if "code" in data["config"]:
+            code_file = data["config"]["code"]
         
-    if "binary" in data["config"]:
-        binary = data["config"]["binary"]
+        if "binary" in data["config"]:
+            binary_file = data["config"]["binary"]
         
-    if "entrypoint" in data["config"]:
-        entrypoint = data["config"]["entrypoint"]
+        if "entrypoint" in data["config"]:
+            entrypoint = data["config"]["entrypoint"]
         
-    if "baseaddress" in data["config"]:
-        base_address_specified = True
-        baseaddress = data["config"]["baseaddress"]
+        if "baseaddress" in data["config"]:
+            base_address_specified = True
+            baseaddress = data["config"]["baseaddress"]
         
-    if "memory" in data["config"]:
-        memory_size = data["config"]["memory"]
+        if "memory" in data["config"]:
+            memory_size = data["config"]["memory"]
         
-    if "debugmode" in data["config"]:
-        debug_mode = data["config"]["debugmode"]
+        if "tscticks" in data["config"]:
+            tscticks = data["config"]["tscticks"]
+        
+        if "KB" in memory_size:
+            memory_size = int(memory_size.replace("KB", "")) * 1024
+        elif "MB" in memory_size:
+            memory_size = int(memory_size.replace("MB", "")) * 1048576
+        elif "GB" in memory_size:
+            memory_size = int(memory_size.replace("GB", "")) * 1073741824
 
-    if "tscticks" in data["config"]:
-        tscticks = data["config"]["tscticks"]
-        
-    if "timelessdebugging" in data["config"]:
-        timelessdebugging = data["config"]["timelessdebugging"]
-        
-    if "breakpoints" in data:
-        breakpoints = data["breakpoints"]["breakpoints"]
-        
-    if "KB" in memory_size:
-        memory_size = int(memory_size.replace("KB", "")) * 1024
-    elif "MB" in memory_size:
-        memory_size = int(memory_size.replace("MB", "")) * 1048576
-    elif "GB" in memory_size:
-        memory_size = int(memory_size.replace("GB", "")) * 1073741824
+        if "KHz" in tscticks:
+            tscticks = int(tscticks.replace("KHz", "")) * 1024
+        elif "MHz" in tscticks:
+            tscticks = int(tscticks.replace("MHz", "")) * 1048576
+        elif "GHz" in tscticks:
+            tscticks = int(tscticks.replace("GHz", "")) * 1073741824
+            
+        if "debug" in data:
+            if "debugmode" in data["debug"]:
+                debug_mode = data["debug"]["debugmode"]
+            if "timelessdebugging" in data["debug"]:
+                timelessdebugging = data["debug"]["timelessdebugging"]
+            if "breakpoints" in data["debug"]:
+                breakpoints = data["debug"]["breakpoints"]
 
-    if "KHz" in tscticks:
-        tscticks = int(tscticks.replace("KHz", "")) * 1024
-    elif "MHz" in tscticks:
-        tscticks = int(tscticks.replace("MHz", "")) * 1048576
-    elif "GHz" in tscticks:
-        tscticks = int(tscticks.replace("GHz", "")) * 1073741824
-                    
+        if "env" in data:
+            if "envp" in data["env"]:
+                envp = data["env"]["envp"]
+
+except FileNotFoundError:
+    raise Exception("Error: config.toml not found.")
             
 memory = numpy.zeros(memory_size, dtype=numpy.uint8)
 instructions = []
 
-if binary == "":
+if binary_file == "":
     with open(code_file, "rt") as f:
         for line in f.readlines():
             instructions.append(line.strip())
 else:
     import lief
     import capstone
-    with open(binary, "rb") as f:
+    with open(binary_file, "rb") as f:
         binary_bytes = f.read()
         
-    binary = lief.parse(binary)
+    binary = lief.parse(binary_file)
     bin_format = binary.format.name
 
     if bin_format == "ELF":
@@ -767,8 +816,16 @@ arg1 = ""
 arg2 = ""
 arg3 = ""
 arg4 = ""
-set_register_value("rsp", memory_size)
+arg_count = 0
+
 set_register_value("rbp", memory_size)
+set_register_value("rsp", memory_size)
+
+envp = "".join(envp)[::-1]
+for i in envp:
+    memory[get_register_value("rsp") - 1] = ord(i)
+    set_register_value("rsp", get_register_value("rsp") - 1)
+
 while True:
     try:
         if instructions[get_register_value("rip") - base_address].replace(":", "") in labels:
@@ -815,25 +872,31 @@ while True:
         
     splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])
     ins = splitted[0]
+    arg1 = ""
+    arg2 = ""
+    arg3 = ""
+    arg4 = ""
+    arg_count = None
     try:
         arg1 = splitted[1]
     except:
-        pass
+        arg_count = 0 if arg_count == None else arg_count
     
     try:
         arg2 = splitted[2]
     except:
-        pass
+        arg_count = 1 if arg_count == None else arg_count
     
     try:
         arg3 = splitted[3]
     except:
-        pass
+        arg_count = 2 if arg_count == None else arg_count
     
     try:
         arg4 = splitted[4]
+        arg_count = 4
     except:
-        pass
+        arg_count = 3 if arg_count == None else arg_count
 
     if arg1 == "$":
         arg1 = get_register_value("rip")
@@ -902,7 +965,7 @@ while True:
 
             set_register_value(arg1, get_register_value(arg1) - 1)
         case "cmp":
-            if arg1 not in reg_list:
+            if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. CMP first argument must be a register.")
 
             temp = 0
@@ -1038,11 +1101,11 @@ while True:
 
             if isrelative(arg1):
                 j = 0
-                for i in popped_val:
+                for i in divide_str(popped_val):
                     memory[calc_relative(arg1) + j] = int(i, 16)
                     j += 1
             else:
-                set_register_value(arg1, int("".join(divide_str(popped_val)), 16))
+                set_register_value(arg1, int(popped_val, 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "xor":
             if arg1 not in reg_list:
@@ -1210,14 +1273,10 @@ while True:
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
 
-            eval_string = arg2.replace("[", "").replace("]", "").replace("/", "//")
-            if not any(arg1 in group for group in re.findall(r'\((.*?)\)', eval_string)):
-                eval_string = eval_string.replace(arg1, "get_register_xxxxxx(\"" + arg1 + "\")")
-
-            for string in strings:
-                eval_string = eval_string.replace(string, str(strings[string]))
+            if not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Second argument must be an address.")
             
-            set_register_value(arg1, int(eval(eval_string.replace("xxxxxx", "value"))))
+            set_register_value(arg1, calc_relative(arg2))
         case "mul":
             if isrelative(arg1):
                 arg1 = calc_relative(arg1)
@@ -1841,6 +1900,78 @@ while True:
                             set_register_value("rip", int(arg1) - 1)
                 else:
                     set_register_value("rip", labels[arg1])
+        case "xchg":
+            if "[" in arg1 and "[" in arg2:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use xchg for memory to memory operations.")
+
+            if not ((arg1 in reg_list or isrelative(arg1)) and (arg2 in reg_list or isrelative(arg2))):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Instruction xchg's every argument should be a register or a memory address.")
+
+            swap_val = get_register_value(arg1)
+            set_register_value(arg1, get_register_value(arg2))
+            set_register_value(arg2, swap_val)
+        case "imul":
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. imul's first argument should be a register.")
+
+            if arg_count > 1 and (arg2 not in reg_list and not isrelative(arg1)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. imul's second argument should be a register.")
+            
+            if arg_count > 2 and (arg3 in reg_list and isrelative(arg1)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. imul's third argument should be a constant.")
+            
+            if arg_count == 1:
+                if get_register_value("rax") * get_register_value(arg1) >= 2 ** get_register_bits("rax"):
+                    set_rflags("CF", 1)
+                    set_rflags("OF", 1)
+                set_register_value("rax", (get_register_value("rax") * get_register_value(arg1)) & 0xFFFFFFFFFFFFFFFF)
+                set_register_value("rdx", (get_register_value("rax") * get_register_value(arg1)) >> 64)
+            elif arg_count == 2:
+                if get_register_value(arg1) * get_register_value(arg2) >= 2 ** get_register_bits(arg1):
+                    set_rflags("CF", 1)
+                    set_rflags("OF", 1)
+                    set_register_value(arg1, 2 ** get_register_bits(arg1) - 1)
+                else:
+                    set_register_value(arg1, get_register_value(arg1) * get_register_value(arg2))
+            elif arg_count == 3:
+                if "0x" in arg3:
+                    if get_register_value(arg2) * int(arg3, 16) >= 2 ** get_register_bits(arg1):
+                        set_rflags("CF", 1)
+                        set_rflags("OF", 1)
+                        set_register_value(arg1, 2 ** get_register_bits(arg1) - 1)
+                    else:
+                        set_register_value(arg1, get_register_value(arg2) * int(arg3, 16))
+                else:
+                    if get_register_value(arg2) * int(arg3) >= 2 ** get_register_bits(arg1):
+                        set_rflags("CF", 1)
+                        set_rflags("OF", 1)
+                        set_register_value(arg1, 2 ** get_register_bits(arg1) - 1)
+                    else:
+                        set_register_value(arg1, get_register_value(arg2) * int(arg3))
+        case "movsxd":
+            if arg_count != 2:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsxd takes two arguments, but {str(arg_count)} given.")
+
+            if arg1 not in reg_list_64bit:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsxd's first argument should be a 64-bit register.")
+
+            if arg2 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsxd's first argument should be a 64-bit register.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "cpuid":
+            if get_register_value("rax") == 0:
+                set_register_value("ebx", 0x756e6547)
+                set_register_value("edx", 0x49656e69)
+                set_register_value("ecx", 0x6c65746e)
+            elif get_register_value("rax") == 1:
+                pass
+            elif get_register_value("rax") == 2:
+                pass
+            elif get_register_value("rax") == 4:
+                pass
+            elif get_register_value("rax") == 7:
+                pass
         case "endbr64":
             pass
         case "":
