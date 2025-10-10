@@ -140,6 +140,21 @@ def size_check(bits, val):
     return val
 
 def get_register_bits(reg):
+    if "byte" in reg:
+        return 8
+    elif "qword" in reg:
+        return 64
+    elif "dword" in reg:
+        return 32
+    elif "xmmword" in reg:
+        return 128
+    elif "ymmword" in reg:
+        return 256
+    elif "zmmword" in reg:
+        return 512
+    elif "word" in reg:
+        return 16
+
     for i in registers:
         if i.name == reg:
             return i.bits
@@ -352,7 +367,6 @@ def debug(instruction):
     except:
         pass
     try:
-        i += 1
         while instructions[get_register_value("rip") - base_address + 2 + i] == "morethanonebyte":
             i += 1
             
@@ -396,12 +410,12 @@ def debug(instruction):
             print("\033[93m" + hex(get_register_value("rbp") + (i * 8)) + ": \033[00m", end="")
             data_read = []
             for j in range(8):
-                data_read.append(hex(memory[get_register_value("rsp") + (i * 8) + j]).replace("0x", ""))
+                data_read.append(hex(memory[get_register_value("rsp") + (i * 8) + j]).replace("0x", "").zfill(2))
 
             data_read.reverse()
             data_read = int("".join(data_read), 16)
             if data_read > 0x1000:
-                print(hex(data_read).zfill(18))
+                print("0x" + hex(data_read).replace("0x", "").zfill(16))
             else:
                 print(data_read)
 
@@ -785,7 +799,7 @@ else:
             for j in range(i.address - last_address - 1):
                 instructions.append("morethanonebyte")
             last_address = i.address
-        instructions.append((i.mnemonic + " " + i.op_str).replace("ptr ", "").strip())
+        instructions.append((i.mnemonic + " " + i.op_str).replace("ptr ", "").replace("fs:", "").strip())
             
         if last_address == -1:
             last_address = i.address
@@ -818,7 +832,6 @@ arg3 = ""
 arg4 = ""
 arg_count = 0
 
-set_register_value("rbp", memory_size)
 set_register_value("rsp", memory_size)
 
 envp = "".join(envp)[::-1]
@@ -926,8 +939,6 @@ while True:
                     set_register_value(arg1, int(arg2, 16))
             else:
                 set_register_value(arg1, get_register_value(arg2))
-        case "nop":
-            pass
         case "add":
             if arg1 not in reg_list and not isrelative(arg1):
                  raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
@@ -1972,9 +1983,50 @@ while True:
                 pass
             elif get_register_value("rax") == 7:
                 pass
-        case "endbr64":
-            pass
-        case "":
+        case "setne" | "sentz":
+            if arg_count != 1:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz takes one arguments, but {str(arg_count)} given.")
+
+            if arg1 not in reg_list or get_register_bits(arg1) != 8:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz' first argument should be a 8-bit register.")
+
+            if get_rflags()["ZF"] == 1:
+                set_register_value(arg1, 0)
+            else:
+                set_register_value(arg1, 1)
+        case "sete" | "setz":
+            if arg_count != 1:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz takes one arguments, but {str(arg_count)} given.")
+
+            if arg1 not in reg_list or get_register_bits(arg1) != 8:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz' first argument should be a 8-bit register.")
+
+            set_register_value(arg1, get_rflags()["ZF"])
+        case "movsx":
+            if arg_count != 2:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsx takes two arguments, but {str(arg_count)} given.")
+
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsx's first argument should be a register or an address.")
+
+            if arg2 not in reg_list and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movsx's second argument should be a register or an address.")
+
+            msb = bin(get_register_value(arg2)).replace("0b", "").zfill(get_register_bits(arg2))[0]
+            extension = msb * (get_register_bits(arg1) - get_register_bits(arg2))
+            set_register_value(arg1, int("0" + (extension + bin(get_register_value(arg2)).replace("0b", "")).lstrip("0"), 2))
+        case "movzx":
+            if arg_count != 2:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx takes two arguments, but {str(arg_count)} given.")
+
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx's first argument should be a register or an address.")
+
+            if arg2 not in reg_list and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx's second argument should be a register or an address.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "endbr64" | "nop" | "notrack" | "":
             pass
         case _:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown instruction: {ins}")
