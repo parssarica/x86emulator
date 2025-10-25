@@ -5,6 +5,7 @@ import tomllib
 import random
 import numpy
 import time
+import json
 import ast
 import sys
 import os
@@ -16,6 +17,15 @@ class Register:
         self.value = value
         self.bits = bits
         self.parent = parent
+
+class File:
+    def __init__(self, name, content):
+        self.name = name
+        self.content = content
+
+class Directory:
+    def __init__(self, name):
+        self.name = name
 
 registers = [Register("rax", 0, 64), Register("rbx", 0, 64), Register("rcx", 0, 64), Register("rdx", 0, 64), Register("rsi", 0, 64), Register("rdi", 0, 64), Register("rbp", 0, 64), Register("rsp", 0, 64), Register("r8", 0, 64), Register("r9", 0, 64), Register("r10", 0, 64), Register("r11", 0, 64), Register("r12", 0, 64), Register("r13", 0, 64), Register("r14", 0, 64), Register("r15", 0, 64), Register("rip", 0, 64), Register("rflags", 0x200, 64)]
 registers += [Register("eax", 0, 32, parent=registers[0]), Register("ebx", 0, 32, parent=registers[1]), Register("ecx", 0, 32, parent=registers[2]), Register("edx", 0, 32, parent=registers[3]), Register("esi", 0, 32, parent=registers[4]), Register("edi", 0, 32, parent=registers[5]), Register("ebp", 0, 32, parent=registers[6]), Register("esp", 0, 32, parent=registers[7]), Register("r8d", 0, 32, parent=registers[8]), Register("r9d", 0, 32, parent=registers[9]), Register("r10d", 0, 32, parent=registers[10]), Register("r11d", 0, 32, parent=registers[11]), Register("r12d", 0, 32, parent=registers[12]), Register("r13d", 0, 32, parent=registers[13]), Register("r14d", 0, 32, parent=registers[14]), Register("r15d", 0, 32, parent=registers[15])]
@@ -30,6 +40,11 @@ reg_list_simd = ["xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
 reg_list_64bit = ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rflags"]
 reg_list_tmp = []
 tld_snapshots = []
+fds = {0: "STDIN", 1: "STDOUT", 2: "STDERR"}
+cursors = {0: 0, 1: 0, 2: 0}
+perms = {0: 0, 1: 0, 2: 0}
+fs = {}
+
 
 for i in range(16):
     registers[70 + i].parent = registers[86 + i]
@@ -130,6 +145,11 @@ def calc_relative(addr):
     eval_string = eval_string.replace("rel ", "")
     eval_string = eval_string.replace("[", "")
     eval_string = eval_string.replace("]", "")
+    i = 1
+    while instructions[get_register_value("rip") - base_address - ep_difference + i] == "morethanonebyte":
+        i += 1
+
+    eval_string = eval_string.replace("get_register_xxxxxx(\"rip\")", str(get_register_value("rip") + i))
     
     return eval(eval_string.replace("xxxxxx", "value"))
     
@@ -274,8 +294,9 @@ def get_register_value(reg):
                     bytes_to_ret.append(memory[calced_addr + i])
 
             for i in range(len(bytes_to_ret)):
-                bytes_to_ret[i] = hex(bytes_to_ret[i]).replace("0x", "")
+                bytes_to_ret[i] = hex(bytes_to_ret[i]).replace("0x", "").zfill(2)
 
+            bytes_to_ret.reverse()
             return int("".join(bytes_to_ret), 16)
         except:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
@@ -358,19 +379,19 @@ def debug(instruction):
     print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m") + "\t\t\033[101mRIP\033[0m")
     try:
         i = 0
-        while instructions[get_register_value("rip") - base_address + 1 + i] == "morethanonebyte":
+        while instructions[get_register_value("rip") - base_address + 1 + i - ep_difference] == "morethanonebyte":
             i += 1
 
-        ins = instructions[get_register_value("rip") - base_address + 1 + i].replace(",", "")
+        ins = instructions[get_register_value("rip") - base_address + 1 + i - ep_difference].replace(",", "")
         print(hex(get_register_value("rip") + 1 + i) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
         pass
     try:
-        while instructions[get_register_value("rip") - base_address + 2 + i] == "morethanonebyte":
+        while instructions[get_register_value("rip") - base_address + 2 + i - ep_difference] == "morethanonebyte":
             i += 1
             
-        ins = instructions[get_register_value("rip") - base_address + 2 + i].replace(",", "")
+        ins = instructions[get_register_value("rip") - base_address + 2 + i - ep_difference].replace(",", "")
         print(hex(get_register_value("rip") + 2 + i) + ":\t", end="")
         print("\033[96m" + magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(ins, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
     except:
@@ -606,8 +627,6 @@ def debug(instruction):
                 showsimd = not showsimd
             elif command.split()[1].lower() == "clearscreen":
                 clearscreen = not clearscreen
-            elif command.split()[1].lower() == "clearscreen":
-                clearscreen = not clearscreen
             elif command.split()[1].lower() == "stack":
                 showstack = not showstack
             elif command.split()[1].lower() == "heap":
@@ -690,8 +709,81 @@ def take_snapshot():
     snapshot["registers"] = []
     for reg in registers:
         snapshot["registers"].append(Register(reg.name, reg.value, reg.bits))
-    snapshot["instruction"] = instructions[get_register_value("rip") - base_address]
+    snapshot["instruction"] = instructions[get_register_value("rip") - base_address - ep_difference]
     tld_snapshots.append(snapshot)
+
+def change_key(dictionary, old_key, new_key):
+    if old_key in dictionary:
+        dictionary[new_key] = dictionary.pop(old_key)
+
+def parse_fs(run_recursive=False, filesys=None, name=None):
+    global fs
+
+    if run_recursive:
+        fs_cpy = {}
+        for i in filesys:
+            fs_cpy[i] = filesys[i]
+            
+        fs_tmp = filesys
+        for i in fs_cpy:
+            if isinstance(fs_tmp[i], dict):
+                fs_tmp[i] = parse_fs(True, filesys=fs_tmp[i], name=i)
+                change_key(fs_tmp, i, Directory(i))
+            else:
+                content = fs_tmp[i]
+                fs_tmp[i] = None
+                change_key(fs_tmp, i, File(i, content.encode()))
+
+        return fs_tmp
+    else:
+        fs_cpy = {}
+        for i in fs:
+            fs_cpy[i] = fs[i]
+
+        for i in fs_cpy:
+            if isinstance(fs[i], dict):
+                fs[i] = parse_fs(True, filesys=fs[i], name=i)
+                change_key(fs, i, Directory(i))
+            else:
+                content = fs[i]
+                fs[i] = None
+                change_key(fs, i, File(i, content.encode()))
+
+def get_file_object(path):    
+    found = False
+    for fd in fds:
+        if get_register_value("rdi") == fd:
+            found = True
+            if fd < 3:
+                break
+
+            splitted = fds[fd].split("/")
+            directory = []
+            directory_tmp = []
+            for i in fs:
+                directory.append(i)
+                directory_tmp.append(i)
+
+            k = 0
+            break_while = False
+            while not break_while:
+                directory_tmp = []
+                for i in directory:
+                    directory_tmp.append(i)
+                    
+                for i in directory_tmp:
+                    if i.name == splitted[k]:
+                        if isinstance(i, Directory):
+                            k += 1
+                            directory = []
+                            for j in i:
+                                directory.append(j)
+                        elif isinstance(i, File):
+                            return File(i.name, i.content)
+                            break_while = True
+
+def get_perm(value):
+    return value & 3
 
 base_address_specified = False
 try:
@@ -742,6 +834,10 @@ try:
             if "envp" in data["env"]:
                 envp = data["env"]["envp"]
 
+        if "files" in data:
+            fs = json.loads(data["files"]["files"])
+            parse_fs()
+
 except FileNotFoundError:
     raise Exception("Error: config.toml not found.")
             
@@ -773,16 +869,19 @@ else:
         else:
             raise Exception("Unknown binary class: " + binary.header.identity_class)
 
-        entrypoint = binary.entrypoint - binary.get_section(".text").virtual_address + 1
+        entrypoint = binary.entrypoint
+        disasm_base_address = binary.get_section(".text").virtual_address
+        ep_difference = binary.get_section(".text").virtual_address - base_address
     elif bin_format == "MACHO":
         machinecode = bytes(binary.get_section("__text").content)
+        disasm_base_address = binary.get_section("__text").virtual_address
         # if binary.header.machine == binary.header.machine.AMD64:
         md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
         # elif binary.header.machine == binary.header.machine.I386:
             # md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         # else:
             # raise Exception("Unknown binary class: " + binary.header.identity_class)
-        entrypoint = binary.entrypoint - binary.get_section("__text").virtual_address + 1
+        entrypoint = binary.entrypoint
     elif bin_format == "PE":
         machinecode = bytes(binary.get_section(".text").content)
         if binary.header.machine == binary.header.machine.AMD64:
@@ -791,10 +890,11 @@ else:
             md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         else:
             raise Exception("Unknown binary class: " + binary.header.identity_class)
-        entrypoint = binary.entrypoint - binary.get_section(".text").virtual_address + 1
+        disasm_base_address = binary.get_section(".text").virtual_address
+        entrypoint = binary.entrypoint
     
     last_address = -1
-    for i in md.disasm(machinecode, base_address):
+    for i in md.disasm(machinecode, disasm_base_address):
         if last_address != -1:
             for j in range(i.address - last_address - 1):
                 instructions.append("morethanonebyte")
@@ -810,7 +910,7 @@ else:
         j += 1
         
 return_code = 1
-set_register_value("rip", entrypoint + base_address - 1)
+set_register_value("rip", entrypoint)
 j = 0
 for i in instructions:
     if bool(re.fullmatch(r"[A-Za-z0-9_]+:", i)):
@@ -841,17 +941,17 @@ for i in envp:
 
 while True:
     try:
-        if instructions[get_register_value("rip") - base_address].replace(":", "") in labels:
+        if instructions[get_register_value("rip") - base_address - ep_difference].replace(":", "") in labels:
             set_register_value("rip", get_register_value("rip") + 1)
             continue
-        elif instructions[get_register_value("rip") - base_address].replace(",", "").split(" ")[0] == ".store":
+        elif instructions[get_register_value("rip") - base_address - ep_difference].replace(",", "").split(" ")[0] == ".store":
             set_register_value("rip", get_register_value("rip") + 1)
             continue
-        elif instructions[get_register_value("rip") - base_address].replace(",", "").split(" ")[0] == "morethanonebyte":
+        elif instructions[get_register_value("rip") - base_address - ep_difference].replace(",", "").split(" ")[0] == "morethanonebyte":
             set_register_value("rip", get_register_value("rip") + 1)
             continue
         else:
-            instruction = instructions[get_register_value("rip") - base_address].replace(",", "")
+            instruction = instructions[get_register_value("rip") - base_address - ep_difference].replace(",", "")
     except:
         raise Exception("Error: No halt function or exit syscall")
 
@@ -942,9 +1042,9 @@ while True:
         case "add":
             if arg1 not in reg_list and not isrelative(arg1):
                  raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
-            
+
             if isrelative(arg2):
-                set_register_value(arg1, calc_relative(arg2))
+                set_register_value(arg1, get_register_value(arg1) + calc_relative(arg2))
             elif arg2 not in reg_list:
                 if "0x" not in arg2:
                     set_register_value(arg1, get_register_value(arg1) + int(arg2))
@@ -979,50 +1079,35 @@ while True:
             if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. CMP first argument must be a register.")
 
-            temp = 0
-            if isrelative(arg2):
-                arg2 = calc_relative(arg2)
-                if get_regster_value(arg1) < arg2:
-                    set_rflags("CF", 1)
-                else:
-                    set_rflags("CF", 0)
-                temp = get_register_value(arg1) - arg2
-            elif arg2 in reg_list:
-                if get_register_value(arg1) < get_register_value(arg2):
-                    set_rflags("CF", 1)
-                else:
-                    set_rflags("CF", 0)
+            arg1 = get_register_value(arg1)
+            if arg2 in reg_list or isrelative(arg2):
                 arg2 = get_register_value(arg2)
-                temp = get_register_value(arg1) - arg2
+            elif "0x" in arg2:
+                arg2 = int(arg2, 16)
             else:
-                if "0x" in arg2:
-                    if get_register_value(arg1) < int(arg2, 16):
-                        set_rflags("CF", 1)
-                    else:
-                        set_rflags("CF", 0)
+                arg2 = int(arg2)
 
-                    arg2 = int(arg2, 16)
-                    temp = get_register_value(arg1) - arg2
-                else:
-                    if get_register_value(arg1) < int(arg2):
-                        set_rflags("CF", 1)
-                    else:
-                        set_rflags("CF", 0)
-                    arg2 = int(arg2)
-                    temp = get_register_value(arg1) - arg2
+            tmp = arg1 - arg2
+            if arg1 < arg2:
+                set_rflags("CF", 1)
+            else:
+                set_rflags("CF", 0)
 
-            if temp == 0:
+            if tmp == 0:
                 set_rflags("ZF", 1)
             else:
                 set_rflags("ZF", 0)
 
-            arg1 = get_register_value(arg1)
-
-            sign = lambda x: x < 0
-            if (sign(arg1) != sign(arg2)) and (sign(temp) != sign(arg1)):
-                set_rflags("OF", 1)
+            if tmp < 0:
+                set_rflags("SF", 1)
             else:
-                set_rflags("OF", 0)
+                set_rflags("SF", 0)
+
+            set_rflags("PF", (bin(int(tmp) % 256).count("1") % 2 == 0))
+            if (arg1 % 16) < (arg2 % 16):
+                set_rflags("AF", 1)
+            else:
+                set_rflags("AF", 0)
         case "jmp":
             if arg1 not in labels:
                 if arg1 in reg_list:
@@ -1167,30 +1252,134 @@ while True:
         case "syscall":
             syscall_id = get_register_value("rax")
             if syscall_id == 0:
-                str_to_write = next(iter(sys.stdin))
-                i = get_register_value("rsi")
-                j = 0
-                try:
-                    while j < get_register_value("rdx"):
-                        memory[i] = ord(str_to_write[j])
-                        j += 1
-                        i += 1
-                except IndexError:
-                    pass
-            elif syscall_id == 1:
-                j = 0
-                for i in memory[get_register_value("rsi"):]:
-                    if j < get_register_value("rdx"):
-                        sys.stdout.write(chr(memory[get_register_value("rsi") + j]))
-                        sys.stdout.flush()
+                if get_register_value("rdi") == 0:
+                    str_to_write = next(iter(sys.stdin)) # TODO: Add FD seperator
+                    i = get_register_value("rsi")
+                    j = 0
+                    try:
+                        while j < get_register_value("rdx"):
+                            memory[i] = ord(str_to_write[j])
+                            j += 1
+                            i += 1
+                    except IndexError:
+                        pass
+                    set_register_value("rax", j)
+                else:
+                    if get_perm(perms[get_register_value("rdi")]) == 1:
+                        set_register_value("rax", -1)
                     else:
-                        break
-                    j += 1
+                        try:
+                            i = get_file_object(fds[get_register_value("rdi")])
+                            for j in range(get_register_value("rdx")):
+                                memory[get_register_value("rsi") + j] = i.content[j + cursors[get_register_value("rdi")]]
+                        except IndexError:
+                            pass
+                        set_register_value("rax", j)
+            elif syscall_id == 1:
+                if get_register_value("rdi") == 1:
+                    j = 0
+                    for i in memory[get_register_value("rsi"):]:
+                        if j < get_register_value("rdx"):
+                            sys.stdout.write(chr(memory[get_register_value("rsi") + j]))
+                            sys.stdout.flush()
+                        else:
+                            break
+                        j += 1
+                else:
+                    if get_perm(get_register_value("rdi")) == 2:
+                        set_register_value("rax", -1)
+                    else:
+                        found = False
+                        for fd in fds:
+                            if get_register_value("rdi") == fd:
+                                found = True
+                                if fd < 3:
+                                    break
+
+                                splitted = fds[fd].split("/")
+                                directory = []
+                                directory_tmp = []
+                                for i in fs:
+                                    directory.append(i)
+                                    directory_tmp.append(i)
+
+                                k = 0
+                                break_while = False
+                                while not break_while:
+                                    directory_tmp = []
+                                    for i in directory:
+                                        directory_tmp.append(i)
+                                    
+                                    for i in directory_tmp:
+                                        if i.name == splitted[k]:
+                                            if isinstance(i, Directory):
+                                                k += 1
+                                                directory = []
+                                                for j in i:
+                                                    directory.append(j)
+                                            elif isinstance(i, File):
+                                                data_to_write = b""
+                                                for j in range(get_register_value("rdx")):
+                                                    data_to_write += chr(memory[get_register_value("rsi") + j]).encode()
+                                                i.content += data_to_write
+                                                break_while = True
+
+                        if not found:
+                            set_register_value("rax", -1)
+            elif syscall_id == 2:
+                file_to_open = ""
+                i = 0
+                while memory[get_register_value("rdi") + i] != 0:
+                    file_to_open += chr(memory[get_register_value("rdi") + i])
+                    i += 1
+
+                found = False
+                i = 0
+                j = 0
+                while not found:
+                    for i in fds:
+                        if j == i:
+                            j += 1
+                            continue
+                    break
+                fds[j] = file_to_open
+                perms[j] = get_register_value("rsi")
+                cursors[j] = 0
+                set_register_value("rax", j)
+            elif syscall_id == 3:
+                try:
+                    fds.pop(get_register_value("rdi"))
+                except KeyError:
+                    set_register_value("rax", -1)
+            elif syscall_id == 8:
+                if get_register_value("rdx") in [0, 1, 2]:
+                    if get_register_value("rdx") == 0:
+                        cursors[get_register_value("rdi")] = get_register_value("rsi")
+                        set_register_value("rax", cursors[get_register_value("rdi")])
+                    elif get_register_value("rdx") == 0:
+                        cursors[get_register_value("rdi")] = cursors[get_register_value("rdi")] + get_register_value("rsi")
+                        set_register_value("rax", cursors[get_register_value("rdi")])
+                    elif get_register_value("rdx") == 0:
+                        cursors[get_register_value("rdi")] = len(get_file_object(fds[get_register_value("rdi")]).content) + get_register_value("rsi")
+                        set_register_value("rax", cursors[get_register_value("rdi")])
+                else:
+                    set_register_value("rax", -1)
             elif syscall_id == 9:
                 set_register_value("rax", heap_pointer)
                 heap_pointer += get_register_value("rsi")
             elif syscall_id == 11:
                 heap_pointer -= get_register_value("rsi")
+            elif syscall_id == 12:
+                if not (get_register_value("rdi") < 0 or get_register_value("rdi") >= memory_size or heap_pointer + get_register_value("rdi") > memory_size):
+                    if get_register_value("rdi") != 0:
+                        heap_pointer += get_register_value("rdi")
+                    set_register_value("rax", heap_pointer)
+            elif syscall_id == 35:
+                seconds = get_register_value("qword [rdi]")
+                nanoseconds = get_register_value("qword [rdi + 8]")
+                time.sleep(seconds + nanoseconds/1000000000)
+            elif syscall_id == 39:
+                set_register_value("rax", os.getpid())
             elif syscall_id == 60:
                 return_code = get_register_value("rdi")
                 break
@@ -1271,9 +1460,6 @@ while True:
             set_register_value("rbp", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
         case "ret":
-            if arg1 not in reg_list:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number.")
-
             popped_val = ""
             for i in range(8):
                 popped_val = (hex(memory[get_register_value("rsp") + i]).replace("0x", "")).zfill(2) + popped_val
@@ -1305,20 +1491,32 @@ while True:
             if arg1 not in reg_list and not isrelative(arg1):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a register / number to a number")
 
-            if (get_register_value(arg1) & (1 << 64) - 1) == 0:
+            if get_register_bits(arg1) != get_register_bits(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Two registers' bits must be same for test.")
+
+            if isrelative(arg1) and isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Two arguments can't be a memory address for test.")
+
+            set_rflags("CF", 0)
+            set_rflags("OF", 0)
+            if arg2 in reg_list:
+                tmp = get_register_value(arg1) & get_register_value(arg2)
+            elif "0x" in arg2:
+                tmp = get_register_value(arg1) & int(arg2, 16)
+            else:
+                tmp = get_register_value(arg1) & int(arg2)
+
+            if tmp == 0:
                 set_rflags("ZF", 1)
             else:
                 set_rflags("ZF", 0)
 
-            set_rflags("SF", ((get_register_value(arg1) & (1 << 64) - 1) >> 63) & 1)
-
-            if bin((get_register_value(arg1) & (1 << 64) - 1) & 0xff).count("1") % 2 == 0:
+            if bin(tmp & 0xff).count("1") % 2 == 0:
                 set_rflags("PF", 1)
             else:
                 set_rflags("PF", 0)
-                
-            set_rflags("CF", 0)
-            set_rflags("OF", 0)
+
+            set_rflags("SF", (tmp >> (get_register_bits(arg2) - 1)) & 1)
         case "loop":
             if get_register_value("rcx") != 0:
                 set_register_value("rcx", get_register_value("rcx") - 1)
@@ -1365,8 +1563,15 @@ while True:
 
             set_register_value("rflags", int("".join(divide_str(popped_val)), 16))
             set_register_value("rsp", get_register_value("rsp") + 8)
-        case "repe" | "repz":
-            set_rflags("ZF", 1)
+        case _ if instruction.startswith("rep"):
+            if ins == "rep":
+                cond = get_register_value("rcx") != 0
+            elif ins == "repe" or ins == "repz":
+                cond = get_rflags()["ZF"] == 1 and get_register_value("rcx") != 0
+            else:
+                cond = get_rflags()["ZF"] == 0 and get_register_value("rcx") != 0
+            if ins != "rep":
+                set_rflags("ZF", 1)
             if arg1.startswith("cmps"):
                 if arg1[-1] == "b":
                     i = 1
@@ -1380,7 +1585,7 @@ while True:
                 try:
                     set_register_value("rsi", get_register_value("rsi") - i)
                     set_register_value("rdi", get_register_value("rdi") - i)
-                    while get_register_value("rcx") != 0:
+                    while cond: #while get_register_value("rcx") != 0:
                         if get_rflags()["DF"] == 1:
                             set_register_value("rsi", get_register_value("rsi") - i)
                             set_register_value("rdi", get_register_value("rdi") - i)
@@ -1390,9 +1595,14 @@ while True:
 
                         if memory[get_register_value("rsi")] != memory[get_register_value("rdi")]:
                             set_rflags("ZF", 0)
-                            break
                     
                         set_register_value("rcx", get_register_value("rcx") - 1)
+                        if ins == "rep":
+                            cond = get_register_value("rcx") != 0
+                        elif ins == "repe" or ins == "repz":
+                            cond = get_rflags()["ZF"] == 1 and get_register_value("rcx") != 0
+                        else:
+                            cond = get_rflags()["ZF"] == 0 and get_register_value("rcx") != 0
                 except:                
                     raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
             elif arg1.startswith("scas"):
@@ -1406,16 +1616,63 @@ while True:
                     i = 8
 
                 try:
-                    while get_rflags("ZF") == 1 and get_register_value("rcx") != 0:
-                        if get_register_value("rax") != memory[get_register_value("rdi")]:
-                            set_rflags("ZF", 0)
+                    while cond:# while get_rflags("ZF") == 1 and get_register_value("rcx") != 0:
+                        if i == 1:
+                            if get_register_value("al") != memory[get_register_value("byte [rdi]")]:
+                                set_rflags("ZF", 0)
+                        elif i == 2:
+                            if get_register_value("ax") != memory[get_register_value("word [rdi]")]:
+                                set_rflags("ZF", 0)
+                        elif i == 3:
+                            if get_register_value("eax") != memory[get_register_value("dword [rdi]")]:
+                                set_rflags("ZF", 0)
+                        elif i == 4:
+                            if get_register_value("rax") != memory[get_register_value("qword [rdi]")]:
+                                set_rflags("ZF", 0)
 
-                        set_register_value("rdi", get_register_value("rdi") - i)
+                        set_register_value("rdi", get_register_value("rdi") + i)
                         set_register_value("rcx", get_register_value("rcx") - 1)
+                        if ins == "rep":
+                            cond = get_register_value("rcx") != 0
+                        elif ins == "repe" or ins == "repz":
+                            cond = get_rflags()["ZF"] == 1 and get_register_value("rcx") != 0
+                        else:
+                            cond = get_rflags()["ZF"] == 0 and get_register_value("rcx") != 0
+                except:
+                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
+            elif arg1.startswith("stos"):
+                if arg1[-1] == "b":
+                    i = 1
+                elif arg1[-1] == "w":
+                    i = 2
+                elif arg1[-1] == "d":
+                    i = 4
+                elif arg1[-1] == "q":
+                    i = 8
+
+                try:
+                    while cond:
+                        if i == 1:
+                            set_register_value("byte [rdi]", get_register_value("al"))
+                        elif i == 2:
+                            set_register_value("word [rdi]", get_register_value("ax"))
+                        elif i == 4:
+                            set_register_value("dword [rdi]", get_register_value("eax"))
+                        elif i == 8:
+                            set_register_value("qword [rdi]", get_register_value("rax"))
+
+                        set_register_value("rcx", get_register_value("rcx") - 1)
+                        set_register_value("rdi", get_register_value("rdi") + i)
+                        if ins == "rep":
+                            cond = get_register_value("rcx") != 0
+                        elif ins == "repe" or ins == "repz":
+                            cond = get_rflags()["ZF"] == 1 and get_register_value("rcx") != 0
+                        else:
+                            cond = get_rflags()["ZF"] == 0 and get_register_value("rcx") != 0
                 except:
                     raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Cannot access further than end of memory.")
             else:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown suffix for instruction \"repe\": {arg1}.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown suffix for instruction \"{ins}\": {arg1}.")
         case "shl":
             if arg1 not in reg_list:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
@@ -1972,17 +2229,27 @@ while True:
             set_register_value(arg1, get_register_value(arg2))
         case "cpuid":
             if get_register_value("rax") == 0:
+                set_register_value("eax", 0xd)
                 set_register_value("ebx", 0x756e6547)
-                set_register_value("edx", 0x49656e69)
                 set_register_value("ecx", 0x6c65746e)
+                set_register_value("edx", 0x49656e69)
             elif get_register_value("rax") == 1:
-                pass
+                set_register_value("eax", 0x306e4)
+                set_register_value("ebx", 0x28200800)
+                set_register_value("edx", 0xbfebfbff)
+                set_register_value("ecx", 0x7fbee3ff)
             elif get_register_value("rax") == 2:
-                pass
+                set_register_value("eax", 0x76036301)
+                set_register_value("ebx", 0xf0b2ff)
+                set_register_value("edx", 0xca0000)
             elif get_register_value("rax") == 4:
-                pass
+                set_register_value("eax", 0x3c004121)
+                set_register_value("ebx", 0x1c0003f)
+                set_register_value("ecx", 0x3f)
             elif get_register_value("rax") == 7:
-                pass
+                set_register_value("eax", 0)
+                set_register_value("ebx", 0x281)
+                set_register_value("ecx", 0x9c000400)
         case "setne" | "sentz":
             if arg_count != 1:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz takes one arguments, but {str(arg_count)} given.")
@@ -1996,10 +2263,10 @@ while True:
                 set_register_value(arg1, 1)
         case "sete" | "setz":
             if arg_count != 1:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz takes one arguments, but {str(arg_count)} given.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins} takes one arguments, but {str(arg_count)} given.")
 
             if arg1 not in reg_list or get_register_bits(arg1) != 8:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. setne and setnz' first argument should be a 8-bit register.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a 8-bit register.")
 
             set_register_value(arg1, get_rflags()["ZF"])
         case "movsx":
@@ -2026,6 +2293,155 @@ while True:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx's second argument should be a register or an address.")
 
             set_register_value(arg1, get_register_value(arg2))
+        case "cmove" | "cmovz":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["ZF"] == 1:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovne" | "cmovnz":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["ZF"] == 0:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmova" | "cmovnbe":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["CF"] == 0 and get_rflags()["ZF"] == 0:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovae" | "cmovnb":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["CF"] == 0:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovnae" | "cmovb":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["CF"] == 1:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovbe" | "cmovna":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["CF"] == 1 or get_rflags()["ZF"] == 1:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovg" | "cmovnle":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["ZF"] == 0 and get_rflags()["SF"] == get_rflags()["OF"]:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovge" | "cmovnl":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["SF"] == get_rflags()["OF"]:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovnge" | "cmovl":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["SF"] != get_rflags()["OF"]:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "cmovng" | "cmovle":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register.")
+
+            if get_rflags()["ZF"] == 1 or get_rflags()["SF"] != get_rflags()["OF"]:
+                if not (isrelative(arg2) or arg2 in reg_list):
+                    if "0x" in arg2:
+                        set_register_value(arg1, int(arg2, 16))
+                    else:
+                        set_register_value(arg1, int(arg2))
+                else:
+                    set_register_value(arg1, get_register_value(arg2))
+        case "bt":
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a register / number to a number.")
+            
+            if isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a register / number to a number.")
+
+            if arg2 in reg_list:
+                arg2 = get_register_value(arg2)
+            elif "0x" in arg2:
+                arg2 = int(arg2, 16)
+            else:
+                arg2 = int(arg2)
+
+            arg2 = arg2 % 32
+            set_rflags("CF", (get_register_value(arg1) >> arg2) & 1)
+        case "rdrand":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. rdrand's first argument should be a register.")
+
+            set_rflags("CF", 1)
+            if get_register_bits(arg1) == 64:
+                tmp = 0xffffffffffffffff
+            elif get_register_bits(arg1) == 32:
+                tmp = 0xffffffff
+            elif get_register_bits(arg1) == 16:
+                tmp = 0xffff
+
+            set_register_value("rax", random.randint(0, tmp))
         case "endbr64" | "nop" | "notrack" | "":
             pass
         case _:
