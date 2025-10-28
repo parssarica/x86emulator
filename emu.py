@@ -76,9 +76,11 @@ strings = {}
 breakpoints = []
 code_file = ""
 binary = ""
+binary_file = ""
+ep_difference = 0
 memory_size = 0
-entrypoint = 0x1
 base_address = 0x400000
+entrypoint = base_address
 debug_mode = False
 timelessdebugging = False
 continuing_backwards = False
@@ -555,15 +557,17 @@ def debug(instruction):
             i = 0
             j = 0
             end = False
+            bytes_shown = 0
             while not end:
-                if i*12 + j + addr - 1 > memory_size:
-                    end = True
+                if i*12 + j + addr - 1 > memory_size or bytes_shown == amount:
+                    break
 
                 print("\033[92m0x" + hex(addr + i * 12).replace("0x", "").zfill(12) + ":\033[00m\t", end="")
                     
                 for j in range(12):
                     if i*12 + j <= amount and not end:
                         print("\033[01m\033[93m" + hex(memory[i * 12 + j + addr]).replace("0x", "").zfill(2) + "\033[00m", end=" ")
+                        bytes_shown += 1
                     else:
                         print("   " * (12 - j), end="")
                         break
@@ -601,27 +605,28 @@ def debug(instruction):
                 amount = int(command.split(" ")[0][6:])
 
             try:
-                address = int(command.split(" ")[1]) - base_address
+                address = int(command.split(" ")[1]) - base_address - ep_difference
             except:
-                address = int(command.split(" ")[1], 16) - base_address
+                address = int(command.split(" ")[1], 16) - base_address - ep_difference
             if address < 0:
                 print("\033[91mERROR: \033[00mAddress doesn't exist. Perhaps you forgot adding base address?")
                 continue
 
-            i = 0
-            j = 0
-            while j < amount:
+            i = address
+            ins_shown = 0
+            while ins_shown < amount:
                 try:
-                    if instructions[i] != "morethanonebyte":
-                        j += 1
-                    else:
+                    if instructions[i] == "morethanonebyte":
                         i += 1
                         continue
-                    print(hex(address + i + base_address + j) + ":\t", end="")
-                    print("\033[96m" + instructions[address + i + j].replace(",", "").split(" ")[0] + "\033[00m " + ", ".join(instructions[address + i].replace(",", "").split(" ")[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+
+                    print(hex(i + base_address + ep_difference) + ":\t", end="")
+                    print("\033[96m" + magicsplit(instructions[i].replace(",", ""), " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[0] + "\033[00m " + ", ".join(magicsplit(instructions[i].replace(",", ""), " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])[1:]).replace("[", "\033[90m[\033[00m").replace("]", "\033[90m]\033[00m"))
+                    # print(instructions[i])
+                    ins_shown += 1
+                    i += 1
                 except:
                     break
-                i += 1
         elif command.startswith("toggle"):
             if command.split()[1].lower() == "simd":
                 showsimd = not showsimd
@@ -633,21 +638,29 @@ def debug(instruction):
                 showheap = not showheap
             elif command.split()[1].lower() == "registers":
                 showregisters = not showregisters
-        elif command == "help":
-            print("Commands:")
-            print("\tsi\t\tForwards one instruction")
-            print("\tbi\t\tBackwards one instruction (Works if time less debugging enabled)")
-            print("\tc\t\tContinues until a breakpoint")
-            print("\tbc\t\tContinues backwards until a breakpoint")
-            print("\tbr\t\tSets a breakpoint")
-            print("\tv\t\tShows a memory region")
-            print("\tci\t\tChanges instruction")
-            print("\tcr\t\tChanges register")
-            print("\tdisasm\t\tShows instructions at an address")
-            print("\ttoggle ...\t\tToggles something on the debug view")
-            print("\trf\t\tRefreshes the debug view")
-            print("\tq\t\tExits emulation")
-            print("\thelp\t\tShows this help message")
+        elif command.startswith("help"):
+            if "toggle" in command:
+                print("Toggle commands:")
+                print("\tsimd\t\tToggles showing SIMD registers.")
+                print("\tclearscreen\tToggles clearing screen.")
+                print("\tstack\t\tToggles showing stack.")
+                print("\theap\t\tToggles showing heap.")
+                print("\tregisters\tToggles showing registers.")
+            else:
+                print("Commands:")
+                print("\tsi\t\tForwards one instruction.")
+                print("\tbi\t\tBackwards one instruction (Works if time less debugging enabled).")
+                print("\tc\t\tContinues until a breakpoint.")
+                print("\tbc\t\tContinues backwards until a breakpoint.")
+                print("\tbr\t\tSets a breakpoint.")
+                print("\tv\t\tShows a memory region.")
+                print("\tci\t\tChanges instruction.")
+                print("\tcr\t\tChanges register.")
+                print("\tdisasm\t\tShows instructions at an address.")
+                print("\ttoggle ...\tToggles something on the debug view.")
+                print("\trf\t\tRefreshes the debug view.")
+                print("\tq\t\tExits emulation.")
+                print("\thelp\t\tShows this help message.")
         else:
             print("\033[91mERROR: \033[00mUnknown command:", command.split(" ")[0])
             
@@ -845,14 +858,24 @@ memory = numpy.zeros(memory_size, dtype=numpy.uint8)
 instructions = []
 
 if binary_file == "":
-    with open(code_file, "rt") as f:
-        for line in f.readlines():
-            instructions.append(line.strip())
+    try:
+        with open(code_file, "rt") as f:
+            for line in f.readlines():
+                instructions.append(line.strip())
+    except NameError:
+        raise Exception("Error: \"code_file\" argument isn't found in config.toml.")
+    except FileNotFoundError:
+        raise Exception(f"Error: File \"{code_file}\" doesn't exist.")
 else:
     import lief
     import capstone
-    with open(binary_file, "rb") as f:
-        binary_bytes = f.read()
+    if binary_file == "":
+        raise Exception("Error: Both \"code_file\" and \"binary_file\" arguments aren't found in config.toml.")
+    try:
+        with open(binary_file, "rb") as f:
+            binary_bytes = f.read()
+    except FileNotFoundError:
+        raise Exception(f"Error: File \"{binary_file}\" doesn't exist.")
         
     binary = lief.parse(binary_file)
     bin_format = binary.format.name
@@ -924,6 +947,8 @@ for i in instructions:
         for byte in ast.literal_eval(heap_string):
             memory[heap_pointer] = byte
             heap_pointer += 1
+    elif i.startswith("section"):
+        raise Exception("Error: Sections aren't supported in file emulation. Use binary emulation.")
 
 beginning = int(time.time())
 arg1 = ""
@@ -1383,6 +1408,8 @@ while True:
             elif syscall_id == 60:
                 return_code = get_register_value("rdi")
                 break
+            elif syscall_id == 201:
+                set_register_value("rax", int(time.time()))
             elif syscall_id == 318:
                 for i in range(get_register_value("rsi")):
                     memory[get_register_value("rdi") + i] = random.randint(0, 255)
