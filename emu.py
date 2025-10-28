@@ -649,7 +649,7 @@ def debug(instruction):
             else:
                 print("Commands:")
                 print("\tsi\t\tForwards one instruction.")
-                print("\tbi\t\tBackwards one instruction (Works if time less debugging enabled).")
+                print("\tbi\t\tBackwards one instruction (Works if time less debugging is enabled).")
                 print("\tc\t\tContinues until a breakpoint.")
                 print("\tbc\t\tContinues backwards until a breakpoint.")
                 print("\tbr\t\tSets a breakpoint.")
