@@ -72,9 +72,9 @@ Toggle commands:
 5. registers		Toggles showing registers.
 
 ##  Total number of instructions and syscalls
-Total instruction count: 120
+Total instruction count: 131
 
-SIMD instruction count: 8
+SIMD instruction count: 17
 
 Total 64-bit linux system call count: 13
 
