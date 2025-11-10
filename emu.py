@@ -4,6 +4,7 @@ import operator
 import tomllib
 import random
 import numpy
+import blosc
 import time
 import json
 import ast
@@ -401,7 +402,7 @@ def debug(instruction):
             print("\033[92m─\033[00m", end="")
         print()
 
-    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen, continuing_backwards, showregisters, showstack, showheap
+    global breakpoints, debug_mode, last_command_exec, showsimd, clearscreen, continuing_backwards, showregisters, showstack, showheap, memory
     continuing_backwards = False
     if clearscreen:
         print("\033c")
@@ -519,6 +520,7 @@ def debug(instruction):
                     if k.name == reg.name:
                         k.value = reg.value
             set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+            memory = blosc.unpack_array(tld_snapshots[snapshot_id]["memory"])
             return tld_snapshots[snapshot_id]["instruction"].replace(",", "")
         elif command == "c":
             debug_mode = False
@@ -539,6 +541,7 @@ def debug(instruction):
                     if k.name == reg.name:
                         k.value = reg.value
             set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+            memory = blosc.unpack_array(tld_snapshots[snapshot_id]["memory"])
             debug_mode = False
             continuing_backwards = True
             return tld_snapshots[snapshot_id]["instruction"].replace(",", "")
@@ -754,6 +757,7 @@ def take_snapshot():
     for reg in registers:
         snapshot["registers"].append(Register(reg.name, reg.value, reg.bits))
     snapshot["instruction"] = instructions[get_register_value("rip") - base_address - ep_difference]
+    snapshot["memory"] = blosc.pack_array(memory, cname="zstd", clevel=9)
     tld_snapshots.append(snapshot)
 
 def change_key(dictionary, old_key, new_key):
@@ -1037,6 +1041,7 @@ while True:
                 if k.name == reg.name:
                     k.value = reg.value
         set_register_value("rip", tld_snapshots[snapshot_id]["addr"])
+        memory = blosc.unpack_array(tld_snapshots[snapshot_id]["memory"])
         instruction = tld_snapshots[snapshot_id]["instruction"].replace(",", "")
         
     splitted = magicsplit(instruction, " ", ["byte", "word", "dword", "qword", "xmmword", "ymmword", "zmmword"])
