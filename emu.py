@@ -2570,6 +2570,145 @@ while True:
             tmp[-(arg3 + 1)] = hex(get_register_value(arg2)).replace("0x", "").zfill(2)
 
             set_register_value(arg1, int("".join(tmp), 16))
+        case "paddb":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. paddb's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. paddb's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            new_val = []
+            for i in range(16):
+                new_val.append(hex((int(tmp[i], 16) + int(tmp2[i], 16)) % 256).replace("0x", "").zfill(2))
+
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "psubb":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. psubb's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. psubb's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            new_val = []
+            for i in range(16):
+                new_val.append(hex((int(tmp[i], 16) - int(tmp2[i], 16)) % 256).replace("0x", "").zfill(2))
+
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "pcmpgtb":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. pcmpgtb's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. pcmpgtb's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            new_val = []
+
+            for k in range(16):
+                i = int(tmp[k], 16)
+                j = int(tmp2[k], 16)
+
+                if i >= 0x7f:
+                    i -= 256
+
+                if j >= 0x7f:
+                    j -= 256
+
+                if i > j:
+                    new_val.append("ff")
+                else:
+                    new_val.append("00")
+
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "pshufb":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. pshufb's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. pshufb's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            new_val = []
+            for i in range(16):
+                if int(tmp2[i], 16) & 0x80:
+                    new_val.append("00")
+                else:
+                    new_val.append(hex(int(tmp[int(tmp2[i], 16)], 16)).replace("0x", "").zfill(2))
+
+            new_val.reverse()
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "punpcklbw":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. punpcklbw's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. punpcklbw's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            tmp.reverse()
+            tmp2.reverse()
+            new_val = []
+            for i in range(8):
+                new_val.append(tmp[i])
+                new_val.append(tmp2[i])
+
+            new_val.reverse()
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "punpckhbw":
+            if arg1 not in reg_list_simd or (arg1 in reg_list_simd and not arg1.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. punpckhbw's first argument must be a XMM SIMD register.")
+            
+            if arg2 not in reg_list_simd and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. punpckhbw's second argument must be a XMM SIMD register or a memory address.")
+
+            tmp = divide_str(hex(get_register_value(arg1)).replace("0x", "").zfill(32))
+            tmp2 = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32))
+            tmp.reverse()
+            tmp2.reverse()
+            new_val = []
+            for i in range(8):
+                new_val.append(tmp[i + 8])
+                new_val.append(tmp2[i + 8])
+
+            new_val.reverse()
+            set_register_value(arg1, int("".join(new_val), 16))
+        case "pmovmskb":
+            if arg1 not in reg_list:
+                raise Exception(f"Errror: RIP is {hex(get_register_value("rip"))}. pmovmskb's first argument must be a non SIMD register.")
+
+            if arg2 not in reg_list_simd:
+                raise Exception(f"Errror: RIP is {hex(get_register_value("rip"))}. pmovmskb's second argument must be a SIMD register.")
+
+            new_val = ""
+            for i in divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(32)):
+                new_val += bin(int(i, 16)).replace("0b", "").zfill(8)[0]
+
+            set_register_value(arg1, int(new_val, 2))
+        case "bsf":
+            if arg1 not in reg_list:
+                raise Exception(f"Errror: RIP is {hex(get_register_value("rip"))}. bsf's first argument must be a register.")
+
+            if arg2 not in reg_list and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. bsf's second argument must be a register or a memory address.")
+
+            if get_register_value(arg2) == 0:
+                set_rflags("ZF", 1)
+            else:
+                set_rflags("ZF", 0)
+                i = 0
+                j = get_register_value(arg2)
+                while j % 2 == 0:
+                    j //= 2
+                    i += 1
+
+                set_register_value(arg1, i)
         case "endbr64" | "nop" | "notrack" | "":
             pass
         case _:
