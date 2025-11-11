@@ -2709,6 +2709,118 @@ while True:
                     i += 1
 
                 set_register_value(arg1, i)
+        case "idiv":
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. idiv's first argument must be a register or a memory address.")
+
+            bits = get_register_bits(arg1)
+            if get_register_value(arg1) > ((2**bits)//2)-1:
+                tmp = get_register_value(arg1) - (2**bits)
+            else:
+                tmp = get_register_value(arg1)
+
+            if bits == 64:
+                if get_register_value("rax") > ((2**64)//2)-1:
+                    arg1 = get_register_value("rax") - (2**64)
+                else:
+                    arg1 = get_register_value("rax")
+            elif bits == 32:
+                if get_register_value("eax") > ((2**32)//2)-1:
+                    arg1 = get_register_value("eax") - (2**32)
+                else:
+                    arg1 = get_register_value("eax")
+            elif bits == 16:
+                if get_register_value("ax") > ((2**16)//2)-1:
+                    arg1 = get_register_value("ax") - (2**16)
+                else:
+                    arg1 = get_register_value("ax")
+            elif bits == 8:
+                if get_register_value("al") > ((2**8)//2)-1:
+                    arg1 = get_register_value("al") - (2**8)
+                else:
+                    arg1 = get_register_value("al")
+
+            if arg1 < 0:
+                arg1 *= -1
+                if bits == 64:
+                    set_register_value("rax", ((arg1 // tmp) * -1) + 2**bits)
+                    set_register_value("rdx", ((arg1 % tmp) * -1) + 2**bits)
+                elif bits == 32:
+                    set_register_value("eax", ((arg1 // tmp) * -1) + 2**bits)
+                    set_register_value("edx", ((arg1 % tmp) * -1) + 2**bits)
+                elif bits == 16:
+                    set_register_value("ax", ((arg1 // tmp) * -1) + 2**bits)
+                    set_register_value("dx", ((arg1 % tmp) * -1) + 2**bits)
+                elif bits == 8:
+                    set_register_value("al", ((arg1 // tmp) * -1) + 2**bits)
+                    set_register_value("dl", ((arg1 % tmp) * -1) + 2**bits)
+            else:
+                if tmp < 0:
+                    if bits == 64:
+                        set_register_value("rax", (arg1 // tmp) + 2**bits)
+                        set_register_value("rdx", (arg1 % tmp) + 2**bits)
+                    elif bits == 32:
+                        set_register_value("eax", (arg1 // tmp) + 2**bits)
+                        set_register_value("edx", (arg1 % tmp) + 2**bits)
+                    elif bits == 16:
+                        set_register_value("ax", (arg1 // tmp) + 2**bits)
+                        set_register_value("dx", (arg1 % tmp) + 2**bits)
+                    elif bits == 8:
+                        set_register_value("al", (arg1 // tmp) + 2**bits)
+                        set_register_value("dl", (arg1 % tmp) + 2**bits)
+                else:
+                    if bits == 64:
+                        set_register_value("rax", arg1 // tmp)
+                        set_register_value("rdx", arg1 % tmp)
+                    elif bits == 32:
+                        set_register_value("eax", arg1 // tmp)
+                        set_register_value("edx", arg1 % tmp)
+                    elif bits == 16:
+                        set_register_value("ax", arg1 // tmp)
+                        set_register_value("dx", arg1 % tmp)
+                    elif bits == 8:
+                        set_register_value("al", arg1 // tmp)
+                        set_register_value("dl", arg1 % tmp)
+        case "cdq":
+            if get_register_value("eax") > 2147483647:
+                set_register_value("edx", 0xffffffff)
+            else:
+                set_register_value("edx", 0)
+        case "cqo":
+            if get_register_value("rax") > 9223372036854775807:
+                set_register_value("rdx", 0xffffffffffffffff)
+            else:
+                set_register_value("rdx", 0)
+        case "cwd":
+            if get_register_value("ax") > 32767:
+                set_register_value("dx", 0xffff)
+            else:
+                set_register_value("dx", 0)
+        case "cbw":
+            if get_register_value("al") > 127:
+                set_register_value("ax", 0xffff)
+            else:
+                set_register_value("ax", 0)
+        case "neg":
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. neg's first argument must be a register or a memory address.")
+
+            byte = int(get_register_value(arg1))
+            if byte == 0:
+                set_rflags("ZF", 1)
+            else:
+                set_rflags("ZF", 0)
+
+            if byte > (((2 ** get_register_bits(arg1)) // 2) - 1):
+                set_rflags("SF", 0)
+            else:
+                set_rflags("SF", 1)
+            
+            if byte > (((2 ** get_register_bits(arg1)) // 2) - 1):
+                byte = (byte - 2 ** get_register_bits(arg1)) * -1
+            else:
+                byte = (2 ** get_register_bits(arg1)) - byte
+            set_register_value(arg1, byte)
         case "endbr64" | "nop" | "notrack" | "":
             pass
         case _:
