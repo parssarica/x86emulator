@@ -1879,104 +1879,38 @@ while True:
                         raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
             set_register_value(arg1, get_register_value(arg2))                
-        case "vmovups":
-            if arg1 not in reg_list_simd and "[" not in arg1:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups with non SIMD registers.")
+        case "vmovups" | "vmovdqu":
+            if (arg1 not in reg_list_simd and not isrelative(arg1)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
 
-            data_to_set = 0
-            if "xmm" in arg1:
-                byte_count = 16
-            elif "ymm" in arg1:
-                byte_count = 32
-            elif "zmm" in arg1:
-                byte_count = 64
-                
-            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
-            if arg2 in reg_list_simd and "[" not in arg1:
-                set_register_value(arg1, get_register_value(arg2))
-            else:
-                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
-                    if "[" in arg1:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups for memory to memory data movement.")
+            if (arg2 not in reg_list_simd and not isrelative(arg2)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
 
-                    data_to_set = "0x"
-                    for i in range(byte_count):
-                        if "0x" in arg2:
-                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
-                        else:
-                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
-                    set_register_value(arg1, int(data_to_set, 16))
-                elif arg2.replace("[", "").replace("]", "") in reg_list:
-                    if "[" in arg1:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups for memory to memory data movement.")
+            set_register_value(arg1, get_register_value(arg2))
+        case "vmovaps" | "vmovdqa":
+            if (arg1 not in reg_list_simd and not isrelative(arg1)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
 
-                    data_to_set = "0x"
-                    for i in range(byte_count):
-                        if "0x" in arg2:
-                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
-                        else:
-                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
-                    set_register_value(arg1, int(data_to_set, 16))
-                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
-                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
-                    for i in range(byte_count):
-                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
-        case "vmovaps":
-            if (arg1 not in reg_list_simd and "[" not in arg1) or (arg1 in reg_list_simd and "xmm" not in arg1):
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovups with non SIMD registers.")
+            if (arg2 not in reg_list_simd and not isrelative(arg2)):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
 
-            data_to_set = 0
-            if "xmm" in arg1:
-                byte_count = 16
-            elif "ymm" in arg1:
-                byte_count = 32
-            elif "zmm" in arg1:
-                byte_count = 64
-        
-            if arg1.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a data to a constant address.")
-
-            if arg2.replace("[", "").replace("]", "") in reg_list + reg_list_simd:
-                if get_register_value(arg2.replace("[", "").replace("]", "")) % 16 != 0:
-                    raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
-            else:
-                if "0x" in arg2:
-                    if int(arg2.replace("[", "").replace("]", ""), 16) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
+            if isrelative(arg1):
+                if "0x" in arg1:
+                    if int(arg1.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
                 else:
-                    if int(arg2.replace("[", "").replace("]", "")) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use vmovaps with an address which isn't divisible by 16.")
+                    if int(arg1.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-            if arg2 in reg_list_simd and "[" not in arg1:
-                set_register_value(arg1, get_register_value(arg2))
-            else:
-                if arg2.replace("[", "").replace("]", "") not in reg_list + reg_list_simd:
-                    if "[" in arg1:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
+            if isrelative(arg2):
+                if "0x" in arg2:
+                    if int(arg2.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
+                else:
+                    if int(arg2.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
+                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-                    data_to_set = "0x"
-                    for i in range(byte_count):
-                        if "0x" in arg2:
-                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
-                        else:
-                            data_to_set += hex(memory[int(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
-                    set_register_value(arg1, int(data_to_set, 16))
-                elif arg2.replace("[", "").replace("]", "") in reg_list:
-                    if "[" in arg1:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use movups for memory to memory data movement.")
-
-                    data_to_set = "0x"
-                    for i in range(byte_count):
-                        if "0x" in arg2:
-                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", ""), 16) + i]).replace("0x", "")
-                        else:
-                            data_to_set += hex(memory[get_register_value(arg2.replace("[", "").replace("]", "")) + i]).replace("0x", "")
-                    set_register_value(arg1, int(data_to_set, 16))
-                elif arg2 in reg_list + reg_list_simd and "[" not in arg2:
-                    data_to_set = divide_str(hex(get_register_value(arg2)).replace("0x", "").zfill(16))
-                    for i in range(byte_count):
-                        memory[get_register_value(arg1.replace("[", "").replace("]", "")) + i] = int(data_to_set[i], 16)
+            set_register_value(arg1, get_register_value(arg2))                
         case "vpxor":
             if arg1 not in reg_list_simd or arg2 not in reg_list_simd:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. First and second argument should be a SIMD register for vpxor.")
@@ -2296,15 +2230,15 @@ while True:
             msb = bin(get_register_value(arg2)).replace("0b", "").zfill(get_register_bits(arg2))[0]
             extension = msb * (get_register_bits(arg1) - get_register_bits(arg2))
             set_register_value(arg1, int("0" + (extension + bin(get_register_value(arg2)).replace("0b", "")).lstrip("0"), 2))
-        case "movzx":
+        case "movzx" | "movzwl":
             if arg_count != 2:
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx takes two arguments, but {str(arg_count)} given.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins} takes two arguments, but {str(arg_count)} given.")
 
             if arg1 not in reg_list and not isrelative(arg1):
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx's first argument should be a register or an address.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s first argument should be a register or an address.")
 
             if arg2 not in reg_list and not isrelative(arg2):
-                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movzx's second argument should be a register or an address.")
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. {ins}'s second argument should be a register or an address.")
 
             set_register_value(arg1, get_register_value(arg2))
         case "cmove" | "cmovz":
@@ -2821,7 +2755,23 @@ while True:
             else:
                 byte = (2 ** get_register_bits(arg1)) - byte
             set_register_value(arg1, byte)
-        case "endbr64" | "nop" | "notrack" | "":
+        case "movntdq":
+            if not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movntdq's first argument must be a memory address.")
+
+            if arg2 not in reg_list_simd or (arg2 in reg_list_simd and (not arg2.startswith("xmm"))):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. movntdq's second argument must be a XMM SIMD register.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "vmovntdq":
+            if not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. vmovntdq's first argument must be a memory address.")
+
+            if arg2 not in reg_list_simd or (arg2 in reg_list_simd and arg2.startswith("xmm")):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. vmovntdq's second argument must be a YMM or ZMM SIMD register.")
+
+            set_register_value(arg1, get_register_value(arg2))
+        case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
             pass
         case _:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown instruction: {ins}")
