@@ -1314,12 +1314,12 @@ while True:
             syscall_id = get_register_value("rax")
             if syscall_id == 0:
                 if get_register_value("rdi") == 0:
-                    str_to_write = next(iter(sys.stdin)) # TODO: Add FD seperator
+                    str_to_write = sys.stdin.buffer.readline()
                     i = get_register_value("rsi")
                     j = 0
                     try:
                         while j < get_register_value("rdx"):
-                            memory[i] = ord(str_to_write[j])
+                            memory[i] = str_to_write[j]
                             j += 1
                             i += 1
                     except IndexError:
@@ -1458,12 +1458,12 @@ while True:
             
             syscall_id = get_register_value("rax")
             if syscall_id == 3:
-                str_to_write = next(iter(sys.stdin))
+                str_to_write = sys.stdin.buffer.readline()
                 i = get_register_value("ecx")
                 j = 0
                 try:
                     while j < get_register_value("edx"):
-                        memory[i] = ord(str_to_write[j])
+                        memory[i] = str_to_write[j]
                         j += 1
                         i += 1
                 except IndexError:
