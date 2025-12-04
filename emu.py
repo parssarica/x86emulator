@@ -118,7 +118,7 @@ def to_little_endian(num, bits):
     return x
 
 def isrelative(address):
-    if "byte" in address or "word" in address or "dword" in address or "qword" in address:
+    if "byte" in address or "word" in address or "dword" in address or "qword" in address or "xmmword" in address or "ymmword" in address or "zmmword" in address:
         if address.split()[1][0] != "[" or address[-1] != "]":
             return False
     else:
@@ -1862,23 +1862,13 @@ while True:
             if (arg2 not in reg_list_simd and not isrelative(arg2)) or (arg2 in reg_list_simd and "xmm" not in arg2):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non XMM SIMD registers.")
 
-            if isrelative(arg1):
-                if "0x" in arg1:
-                    if int(arg1.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
-                else:
-                    if int(arg1.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
+            if isrelative(arg1) and get_register_value(arg1.replace("[", "").replace("]", "").replace("byte", "").replace("word", "").replace("dword", "").replace("qword", "").replace("xmmword", "").replace("xmm", "").strip()) % 16 != 0:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-            if isrelative(arg2):
-                if "0x" in arg2:
-                    if int(arg2.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
-                else:
-                    if int(arg2.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
+            if isrelative(arg2) and get_register_value(arg2.replace("[", "").replace("]", "").replace("byte", "").replace("word", "").replace("dword", "").replace("qword", "").replace("xmmword", "").replace("xmm", "").strip()) % 16 != 0:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-            set_register_value(arg1, get_register_value(arg2))                
+            set_register_value(arg1, get_register_value(arg1))
         case "vmovups" | "vmovdqu":
             if (arg1 not in reg_list_simd and not isrelative(arg1)):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
@@ -1894,23 +1884,13 @@ while True:
             if (arg2 not in reg_list_simd and not isrelative(arg2)):
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't use {ins} with non SIMD registers.")
 
-            if isrelative(arg1):
-                if "0x" in arg1:
-                    if int(arg1.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
-                else:
-                    if int(arg1.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
+            if get_register_value(arg1) % 16 != 0:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-            if isrelative(arg2):
-                if "0x" in arg2:
-                    if int(arg2.split()[-1].replace("[", "").replace("]", ""), 16) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
-                else:
-                    if int(arg2.split()[-1].replace("[", "").replace("]", "")) % 16 != 0:
-                        raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
+            if get_register_value(arg2) % 16 != 0:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Address isn't aligned.")
 
-            set_register_value(arg1, get_register_value(arg2))                
+            set_register_value(arg1, get_register_value(arg1))
         case "vpxor":
             if arg1 not in reg_list_simd or arg2 not in reg_list_simd:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. First and second argument should be a SIMD register for vpxor.")
