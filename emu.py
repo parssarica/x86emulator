@@ -2751,6 +2751,43 @@ while True:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. vmovntdq's second argument must be a YMM or ZMM SIMD register.")
 
             set_register_value(arg1, get_register_value(arg2))
+        case "sbb":
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't move a number to a number")
+
+            if isrelative(arg2):
+                val2 = calc_relative(arg2)
+            elif arg2 not in reg_list:
+                if "0x" not in arg2:
+                    val2 = int(arg2)
+                else:
+                    val2 = int(arg2, 16)
+            else:
+                val2 = get_register_value(arg2)
+
+            if get_rflags()["CF"]:
+                val2 += 1
+
+            result = get_register_value(arg1) - val2
+            if result == 0:
+                set_rflags("ZF", 1)
+            else:
+                set_rflags("ZF", 0)
+
+            if bin(result).replace("0b", "").zfill(get_register_bits(arg1))[0] == "1":
+                set_rflags("SF", 1)
+            else:
+                set_rflags("SF", 0)
+
+            tmp = 2 ** (get_register_bits(arg1) - 1)
+            if val2 >= tmp or val2 <= (tmp * -1):
+                set_rflags("OF", 1)
+            else:
+                set_rflags("OF", 0)
+
+            set_rflags("CF", (result >> get_register_bits(arg1)) & 1)
+
+            set_register_value(arg1, get_register_value(arg1) - val2)
         case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
             pass
         case _:
