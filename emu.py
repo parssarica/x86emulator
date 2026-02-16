@@ -2788,6 +2788,12 @@ while True:
             set_rflags("CF", (result >> get_register_bits(arg1)) & 1)
 
             set_register_value(arg1, get_register_value(arg1) - val2)
+        case "bswap":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. BSWAP can't operate on non-register values.")
+
+            tmp = get_register_value(arg1)
+            set_register_value(arg1, int("".join(divide_str(hex(tmp).replace("0x", ""))[::-1]), 16))
         case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
             pass
         case _:
