@@ -2794,6 +2794,23 @@ while True:
 
             tmp = get_register_value(arg1)
             set_register_value(arg1, int("".join(divide_str(hex(tmp).replace("0x", ""))[::-1]), 16))
+        case "movbe":            
+            if arg1 not in reg_list and not isrelative(arg1):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. MOVBE can't operate on immediate values.")
+
+            if arg2 not in reg_list and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. MOVBE can't operate on immediate values.")
+
+            if arg1 in reg_list and arg2 in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Both arguments of MOVBE can't be a register.")
+
+            if isrelative(arg1) and isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Both arguments of MOVBE can't be a memory address.")
+
+            if isrelative(arg1):
+                set_register_value(arg1, get_register_value(arg2))
+            else:
+                set_register_value(arg1, int("".join(divide_str(hex(get_register_value(arg2)).replace("0x", ""))[::-1]), 16))
         case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
             pass
         case _:
