@@ -72,7 +72,7 @@ Toggle commands:
 5. registers		Toggles showing registers.
 
 ##  Total number of instructions and syscalls
-Total instruction count: 157
+Total instruction count: 160
 
 SIMD instruction count: 28
 
