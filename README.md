@@ -3,7 +3,7 @@
 ## config.toml
 
 The only thing you need to start emulation is a "config.toml" file. It's a config file with TOML syntax. Here is an example:
-```
+```toml
 [config]
 binary = "example_binary"
 memory = "1GB"
