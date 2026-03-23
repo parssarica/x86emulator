@@ -2811,6 +2811,14 @@ while True:
                 set_register_value(arg1, get_register_value(arg2))
             else:
                 set_register_value(arg1, int("".join(divide_str(hex(get_register_value(arg2)).replace("0x", ""))[::-1]), 16))
+        case "lzcnt":
+            if arg1 not in reg_list:
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't write the result to an immediate or a memory address.")
+
+            if arg2 not in reg_list and not isrelative(arg2):
+                raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't operate on immediates.")
+
+            set_register_value(arg1, bin(get_register_value(arg2)).replace("0b", "").zfill(get_register_bits(arg2)).count("0"))
         case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
             pass
         case _:
