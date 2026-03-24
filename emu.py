@@ -2819,7 +2819,7 @@ while True:
                 raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Can't operate on immediates.")
 
             set_register_value(arg1, bin(get_register_value(arg2)).replace("0b", "").zfill(get_register_bits(arg2)).count("0"))
-        case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "":
+        case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "prefetchw" | "":
             pass
         case _:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown instruction: {ins}")
