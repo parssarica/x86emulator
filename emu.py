@@ -2821,7 +2821,7 @@ while True:
             set_register_value(arg1, bin(get_register_value(arg2)).replace("0b", "").zfill(get_register_bits(arg2)).count("0"))
         case "ud2":
             raise Exception(f"Error RIP is {hex(get_register_value("rip"))}. Invalid Opcode Exception.")
-        case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "prefetchw" | "":
+        case "endbr64" | "nop" | "nopl" | "nopw" | "notrack" | "prefetcht0" | "prefetcht1" | "prefetcht2" | "prefetcht3" | "prefetchnta" | "sfence" | "prefetchw" | "pause" | "":
             pass
         case _:
             raise Exception(f"Error: RIP is {hex(get_register_value("rip"))}. Unknown instruction: {ins}")
